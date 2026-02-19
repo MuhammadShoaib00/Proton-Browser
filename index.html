@@ -1553,7 +1553,7 @@ const GITHUB_USERNAME = 'MuhammadShoaib00';  // ← UPDATE THIS with your GitHub
 const GITHUB_REPO     = 'proton-browser';          // ← UPDATE THIS if your repo has a different name
 
 async function fetchRelease() {
-    try {
+    try {    
         // Fetch latest release from GitHub
         const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`);
         if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
