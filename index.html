@@ -1546,87 +1546,101 @@ if (arrowBtn && arrow) {
 }
 
 /* ═══════════════════════════════════════════════
-   DIRECT DOWNLOAD SETUP
+   GITHUB RELEASE DOWNLOAD
 ═══════════════════════════════════════════════ */
-// Direct download from local file (same folder as index.html)
-function setupDownload() {
-    const version = '1.0.0';
-    const fileName = 'Proton-Browser-Setup-1.0.0.exe';
-    
-    // Try multiple possible paths (works for root, docs, or website folder)
-    const possiblePaths = [
-        `./${fileName}`,                    // Same folder as index.html
-        `./downloads/${fileName}`,         // In downloads subfolder
-        `../dist/${fileName}`,              // In dist folder (if in subfolder)
-        fileName                            // Just filename
-    ];
-    
-    // Use the first path (same folder) - update this if file is in different location
-    const downloadUrl = possiblePaths[0];
-    
-    // Update version display
-    const versionEl = document.getElementById('hero-version');
-    if (versionEl) {
-        versionEl.textContent = `v${version}`;
+// Download from GitHub Releases (required for files > 100MB)
+const GITHUB_USERNAME = 'MuhammadShoaib00';  // ← UPDATE THIS with your GitHub username
+const GITHUB_REPO     = 'proton-browser';          // ← UPDATE THIS if your repo has a different name
+
+async function fetchRelease() {
+    try {
+        // Fetch latest release from GitHub
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`);
+        if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+        
+        const data = await res.json();
+        const version = data.tag_name?.replace('v','') || '1.0.0';
+        const date = data.published_at
+            ? new Date(data.published_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+            : '';
+        
+        // Update version display
+        const versionEl = document.getElementById('hero-version');
+        if (versionEl) {
+            versionEl.textContent = `v${version}`;
+        }
+        
+        const versionNumEl = document.getElementById('version-num');
+        if (versionNumEl) {
+            versionNumEl.textContent = version;
+        }
+        
+        if (date) {
+            const dateEl = document.getElementById('release-date');
+            if (dateEl) {
+                dateEl.textContent = `Released ${date}`;
+            }
+        }
+        
+        // Find the .exe installer file in release assets
+        const asset = data.assets?.find(a => 
+            a.name.endsWith('.exe') || 
+            a.name.includes('Setup') || 
+            a.name.includes('Proton-Browser')
+        );
+        
+        if (asset) {
+            // Use direct download URL from GitHub Releases
+            const downloadUrl = asset.browser_download_url;
+            
+            // Set download links
+            const heroBtn = document.getElementById('hero-download-btn');
+            if (heroBtn) {
+                heroBtn.href = downloadUrl;
+                heroBtn.removeAttribute('download'); // Remove download attr for external URLs
+            }
+            
+            const mainBtn = document.getElementById('main-download-btn');
+            if (mainBtn) {
+                mainBtn.href = downloadUrl;
+                mainBtn.removeAttribute('download');
+            }
+            
+            // Update nav CTA button if it exists
+            const navCta = document.querySelector('.nav-cta');
+            if (navCta) {
+                navCta.href = downloadUrl;
+            }
+            
+            console.log('✅ Download link set from GitHub Release:', downloadUrl);
+        } else {
+            // Fallback: link to releases page
+            const fallbackUrl = `https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`;
+            document.getElementById('hero-download-btn').href = fallbackUrl;
+            const mainBtn = document.getElementById('main-download-btn');
+            if (mainBtn) mainBtn.href = fallbackUrl;
+            console.warn('⚠️ No .exe file found in release, linking to releases page');
+        }
+    } catch (err) {
+        console.error('❌ Failed to fetch GitHub release:', err);
+        
+        // Fallback: show version and link to releases page
+        const versionEl = document.getElementById('hero-version');
+        if (versionEl) {
+            versionEl.textContent = 'Free';
+        }
+        
+        const fallbackUrl = `https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`;
+        const heroBtn = document.getElementById('hero-download-btn');
+        if (heroBtn) heroBtn.href = fallbackUrl;
+        
+        const mainBtn = document.getElementById('main-download-btn');
+        if (mainBtn) mainBtn.href = fallbackUrl;
     }
-    
-    const versionNumEl = document.getElementById('version-num');
-    if (versionNumEl) {
-        versionNumEl.textContent = version;
-    }
-    
-    // Set download links
-    const heroBtn = document.getElementById('hero-download-btn');
-    if (heroBtn) {
-        heroBtn.href = downloadUrl;
-        heroBtn.download = fileName; // Force download instead of navigating
-        heroBtn.setAttribute('download', fileName);
-    }
-    
-    const mainBtn = document.getElementById('main-download-btn');
-    if (mainBtn) {
-        mainBtn.href = downloadUrl;
-        mainBtn.download = fileName;
-        mainBtn.setAttribute('download', fileName);
-    }
-    
-    // Also update nav CTA button if it exists
-    const navCta = document.querySelector('.nav-cta');
-    if (navCta) {
-        navCta.href = downloadUrl;
-        navCta.download = fileName;
-    }
-    
-    console.log('Download setup complete:', downloadUrl);
 }
 
 // Initialize on page load
-setupDownload();
-
-// Optional: Also try GitHub releases as fallback (uncomment if you want both options)
-/*
-const GITHUB_USERNAME = 'YOUR_GITHUB_USERNAME';
-const GITHUB_REPO     = 'proton-browser';
-
-async function fetchReleaseFallback() {
-    try {
-        const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`);
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        const asset = data.assets?.find(a => a.name.endsWith('.exe') || a.name.includes('Setup'));
-        if (asset) {
-            const url = asset.browser_download_url;
-            document.getElementById('hero-download-btn').href = url;
-            document.getElementById('main-download-btn').href = url;
-            console.log('Using GitHub release:', url);
-        }
-    } catch (err) {
-        console.log('GitHub fallback failed, using local file');
-    }
-}
-// Uncomment to enable GitHub fallback:
-// fetchReleaseFallback();
-*/
+fetchRelease();
 </script>
 </body>
 </html>

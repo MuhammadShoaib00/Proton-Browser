@@ -52,3 +52,7 @@ coverage/
 *.tmp
 *.temp
 
+# Setup/Installer files (too large for GitHub, use Releases instead)
+*.exe
+Proton-Browser-Setup-*.exe
+
