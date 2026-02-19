@@ -1546,35 +1546,87 @@ if (arrowBtn && arrow) {
 }
 
 /* ═══════════════════════════════════════════════
-   GITHUB RELEASE FETCH
+   DIRECT DOWNLOAD SETUP
 ═══════════════════════════════════════════════ */
+// Direct download from local file (same folder as index.html)
+function setupDownload() {
+    const version = '1.0.0';
+    const fileName = 'Proton-Browser-Setup-1.0.0.exe';
+    
+    // Try multiple possible paths (works for root, docs, or website folder)
+    const possiblePaths = [
+        `./${fileName}`,                    // Same folder as index.html
+        `./downloads/${fileName}`,         // In downloads subfolder
+        `../dist/${fileName}`,              // In dist folder (if in subfolder)
+        fileName                            // Just filename
+    ];
+    
+    // Use the first path (same folder) - update this if file is in different location
+    const downloadUrl = possiblePaths[0];
+    
+    // Update version display
+    const versionEl = document.getElementById('hero-version');
+    if (versionEl) {
+        versionEl.textContent = `v${version}`;
+    }
+    
+    const versionNumEl = document.getElementById('version-num');
+    if (versionNumEl) {
+        versionNumEl.textContent = version;
+    }
+    
+    // Set download links
+    const heroBtn = document.getElementById('hero-download-btn');
+    if (heroBtn) {
+        heroBtn.href = downloadUrl;
+        heroBtn.download = fileName; // Force download instead of navigating
+        heroBtn.setAttribute('download', fileName);
+    }
+    
+    const mainBtn = document.getElementById('main-download-btn');
+    if (mainBtn) {
+        mainBtn.href = downloadUrl;
+        mainBtn.download = fileName;
+        mainBtn.setAttribute('download', fileName);
+    }
+    
+    // Also update nav CTA button if it exists
+    const navCta = document.querySelector('.nav-cta');
+    if (navCta) {
+        navCta.href = downloadUrl;
+        navCta.download = fileName;
+    }
+    
+    console.log('Download setup complete:', downloadUrl);
+}
+
+// Initialize on page load
+setupDownload();
+
+// Optional: Also try GitHub releases as fallback (uncomment if you want both options)
+/*
 const GITHUB_USERNAME = 'YOUR_GITHUB_USERNAME';
 const GITHUB_REPO     = 'proton-browser';
 
-async function fetchRelease() {
+async function fetchReleaseFallback() {
     try {
         const res = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`);
         if (!res.ok) throw new Error();
         const data = await res.json();
-        const version = data.tag_name?.replace('v','') || '1.0.0';
-        const date = data.published_at
-            ? new Date(data.published_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-            : '';
-        document.getElementById('version-num').textContent   = version;
-        document.getElementById('hero-version').textContent  = `v${version}`;
-        if (date) document.getElementById('release-date').textContent = `Released ${date}`;
         const asset = data.assets?.find(a => a.name.endsWith('.exe') || a.name.includes('Setup'));
-        const url = asset?.browser_download_url || `https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`;
-        document.getElementById('hero-download-btn').href = url;
-        document.getElementById('main-download-btn').href  = url;
-    } catch {
-        document.getElementById('hero-version').textContent = 'Free';
-        const fallback = `https://github.com/${GITHUB_USERNAME}/${GITHUB_REPO}/releases/latest`;
-        document.getElementById('hero-download-btn').href = fallback;
-        document.getElementById('main-download-btn').href  = fallback;
+        if (asset) {
+            const url = asset.browser_download_url;
+            document.getElementById('hero-download-btn').href = url;
+            document.getElementById('main-download-btn').href = url;
+            console.log('Using GitHub release:', url);
+        }
+    } catch (err) {
+        console.log('GitHub fallback failed, using local file');
     }
 }
-fetchRelease();
+// Uncomment to enable GitHub fallback:
+// fetchReleaseFallback();
+*/
 </script>
 </body>
 </html>
