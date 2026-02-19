@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proton Browser</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" sizes="256x256" href="assets/logo.png">
+    <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+    <link rel="apple-touch-icon" href="assets/logo.png">
+</head>
+<body>
+    <!-- Custom Title Bar -->
+    <div class="titlebar">
+        <div class="titlebar-drag-region">
+            <div class="titlebar-logo">
+                <img src="assets/logo.svg" alt="Proton" class="titlebar-icon">
+                <span class="titlebar-title">Proton Browser</span>
+            </div>
+        </div>
+        <div class="window-controls">
+            <button class="titlebar-button minimize-button" id="minimize-btn" title="Minimize">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                    <rect x="0" y="5" width="12" height="2" fill="currentColor"/>
+                </svg>
+            </button>
+            <button class="titlebar-button maximize-button" id="maximize-btn" title="Maximize">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                    <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                </svg>
+            </button>
+            <button class="titlebar-button close-button" id="close-btn" title="Close">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                    <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Top Navigation Bar -->
+    <div class="navbar">
+        <div class="browser-logo">
+            <img src="assets/logo.svg" alt="INDUS" class="navbar-logo">
+        </div>
+        <div class="nav-controls">
+            <button id="back-btn" class="nav-btn" title="Back">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <button id="forward-btn" class="nav-btn" title="Forward">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+            </button>
+            <button id="reload-btn" class="nav-btn" title="Reload">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+            </button>
+            <button id="home-btn" class="nav-btn" title="Home">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <path d="M9 22V12h6v10"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="address-bar-container">
+            <div class="security-icon" id="security-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+            </div>
+            <input type="text" id="address-bar" placeholder="Search or enter website address" />
+            <div class="protection-indicator" title="Screenshot Protection Active">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="20" rx="2"/>
+                    <path d="M9 12l2 2 4-4"/>
+                </svg>
+            </div>
+        </div>
+
+        <div class="browser-controls">
+            <button id="vpn-btn" class="nav-btn vpn-button" title="VPN">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="20" height="14" rx="2"/>
+                    <path d="M16 3l-4 4-4-4"/>
+                </svg>
+                <span class="vpn-status-dot"></span>
+            </button>
+            <button id="new-tab-btn" class="nav-btn" title="New Tab">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+            </button>
+            <button id="menu-btn" class="nav-btn" title="Menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="1"/>
+                    <circle cx="12" cy="5" r="1"/>
+                    <circle cx="12" cy="19" r="1"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tabs Container -->
+    <div class="tabs-container" id="tabs-container">
+        <!-- Tabs will be dynamically added here -->
+    </div>
+
+    <!-- Webview Container -->
+    <div class="webview-container" id="webview-container">
+        <!-- Webviews will be dynamically added here -->
+    </div>
+
+    <!-- Main Menu Dropdown -->
+    <div id="main-menu" class="main-menu" style="display: none;">
+        <div class="menu-item" data-action="new-tab">
+            <span class="menu-icon">➕</span>
+            <span class="menu-text">New Tab</span>
+            <span class="menu-shortcut">Ctrl+T</span>
+        </div>
+        <div class="menu-item" data-action="new-window">
+            <span class="menu-icon">🗔</span>
+            <span class="menu-text">New Window</span>
+            <span class="menu-shortcut">Ctrl+N</span>
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-item" data-action="history">
+            <span class="menu-icon">📜</span>
+            <span class="menu-text">History</span>
+            <span class="menu-shortcut">Ctrl+H</span>
+        </div>
+        <div class="menu-item" data-action="downloads">
+            <span class="menu-icon">⬇️</span>
+            <span class="menu-text">Downloads</span>
+            <span class="menu-shortcut">Ctrl+J</span>
+        </div>
+        <div class="menu-item" data-action="bookmarks">
+            <span class="menu-icon">⭐</span>
+            <span class="menu-text">Bookmarks</span>
+            <span class="menu-shortcut">Ctrl+B</span>
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-item" data-action="zoom">
+            <span class="menu-icon">🔍</span>
+            <span class="menu-text">Zoom</span>
+            <span class="menu-value" id="zoom-value">100%</span>
+        </div>
+        <div class="menu-item" data-action="print">
+            <span class="menu-icon">🖨️</span>
+            <span class="menu-text">Print</span>
+            <span class="menu-shortcut">Ctrl+P</span>
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-item" data-action="settings">
+            <span class="menu-icon">⚙️</span>
+            <span class="menu-text">Settings</span>
+        </div>
+        <div class="menu-item" data-action="about">
+            <span class="menu-icon">ℹ️</span>
+            <span class="menu-text">About Proton Browser</span>
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-item" data-action="exit">
+            <span class="menu-icon">❌</span>
+            <span class="menu-text">Exit</span>
+            <span class="menu-shortcut">Alt+F4</span>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="settings-panel" style="display: none;">
+        <div class="settings-overlay"></div>
+        <div class="settings-container">
+            <div class="settings-header">
+                <h2>⚙️ Settings</h2>
+                <button class="settings-close" id="settings-close">✕</button>
+            </div>
+            
+            <div class="settings-body">
+                <div class="settings-sidebar">
+                    <div class="settings-nav-item active" data-section="general">
+                        <span class="settings-nav-icon">🔧</span>
+                        <span>General</span>
+                    </div>
+                    <div class="settings-nav-item" data-section="appearance">
+                        <span class="settings-nav-icon">🎨</span>
+                        <span>Appearance</span>
+                    </div>
+                    <div class="settings-nav-item" data-section="privacy">
+                        <span class="settings-nav-icon">🔒</span>
+                        <span>Privacy & Security</span>
+                    </div>
+                    <div class="settings-nav-item" data-section="performance">
+                        <span class="settings-nav-icon">⚡</span>
+                        <span>Performance</span>
+                    </div>
+                    <div class="settings-nav-item" data-section="advanced">
+                        <span class="settings-nav-icon">🔬</span>
+                        <span>Advanced</span>
+                    </div>
+                    <div class="settings-nav-item" data-section="features">
+                        <span class="settings-nav-icon">✍️</span>
+                        <span>Features</span>
+                    </div>
+                    <div class="settings-nav-item" data-section="about">
+                        <span class="settings-nav-icon">ℹ️</span>
+                        <span>About</span>
+                    </div>
+                </div>
+
+                <div class="settings-content">
+                    <!-- General Settings -->
+                    <div class="settings-section active" id="section-general">
+                        <h3>General Settings</h3>
+                        
+                        <div class="setting-group">
+                            <label class="setting-label">Home Page</label>
+                            <input type="text" class="setting-input" id="homepage" placeholder="https://www.google.com" value="https://www.google.com">
+                            <p class="setting-description">Set the page that opens when you start a new tab</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-label">Search Engine</label>
+                            <select class="setting-select" id="search-engine">
+                                <option value="google">Google</option>
+                                <option value="bing">Bing</option>
+                                <option value="duckduckgo">DuckDuckGo</option>
+                                <option value="yahoo">Yahoo</option>
+                            </select>
+                            <p class="setting-description">Choose your default search engine</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="restore-tabs" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Restore tabs on startup</span>
+                            </label>
+                            <p class="setting-description">Reopen tabs from your last session</p>
+                        </div>
+                    </div>
+
+                    <!-- Appearance Settings -->
+                    <div class="settings-section" id="section-appearance">
+                        <h3>Appearance</h3>
+                        
+                        <div class="setting-group">
+                            <label class="setting-label">Theme</label>
+                            <select class="setting-select" id="theme">
+                                <option value="dark" selected>Dark (Professional Blue)</option>
+                                <option value="light">Light</option>
+                                <option value="auto">System Default</option>
+                            </select>
+                            <p class="setting-description">Choose your preferred color theme</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-label">Zoom Level</label>
+                            <div class="zoom-controls">
+                                <button class="zoom-btn" id="zoom-out">−</button>
+                                <span class="zoom-display" id="zoom-display">100%</span>
+                                <button class="zoom-btn" id="zoom-in">+</button>
+                            </div>
+                            <input type="range" class="setting-range" id="zoom-range" min="50" max="200" value="100" step="10">
+                            <p class="setting-description">Adjust the zoom level for all pages</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="show-bookmarks-bar">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Show bookmarks bar</span>
+                            </label>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="smooth-scrolling" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Smooth scrolling</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Privacy & Security Settings -->
+                    <div class="settings-section" id="section-privacy">
+                        <h3>Privacy & Security</h3>
+                        
+                        <div class="setting-group screenshot-protection-group">
+                            <label class="setting-toggle screenshot-toggle-row">
+                                <div class="screenshot-toggle-info">
+                                    <span class="screenshot-icon-wrap">🛡️</span>
+                                    <div>
+                                        <strong>Screenshot Protection</strong>
+                                        <span id="screenshot-protection-status" class="screenshot-status-badge screenshot-status-on">Active</span>
+                                    </div>
+                                </div>
+                                <input type="checkbox" id="screenshot-protection" checked>
+                                <span class="toggle-slider screenshot-slider"></span>
+                            </label>
+                            <p class="setting-description">Prevents third-party apps (Time Doctor, proctoring tools, screen recorders) from capturing the browser content. Disable only if you need to share your screen.</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="ad-blocker" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Enable ad blocker</span>
+                            </label>
+                            <p class="setting-description">Block ads and trackers for faster browsing</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="do-not-track" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Send "Do Not Track" requests</span>
+                            </label>
+                            <p class="setting-description">Ask websites not to track your browsing</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-label">Clear Browsing Data</label>
+                            <button class="setting-button" id="clear-data">Clear Data</button>
+                            <p class="setting-description">Remove cookies, cache, and browsing history</p>
+                        </div>
+                    </div>
+
+                    <!-- Performance Settings -->
+                    <div class="settings-section" id="section-performance">
+                        <h3>Performance</h3>
+                        
+                        <div class="setting-group">
+                            <div class="setting-status">
+                                <span class="status-icon">⚡</span>
+                                <div>
+                                    <strong>Hardware Acceleration</strong>
+                                    <p class="status-active">Enabled</p>
+                                </div>
+                            </div>
+                            <p class="setting-description">Uses GPU for faster rendering</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="preload-pages" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Preload pages for faster browsing</span>
+                            </label>
+                            <p class="setting-description">Predict and preload pages you might visit</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="lazy-load-images" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Lazy load images</span>
+                            </label>
+                            <p class="setting-description">Load images only when needed to save bandwidth</p>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Settings -->
+                    <div class="settings-section" id="section-advanced">
+                        <h3>Advanced</h3>
+                        
+                        <div class="setting-group">
+                            <label class="setting-toggle">
+                                <input type="checkbox" id="developer-tools">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">Enable Developer Tools</span>
+                            </label>
+                            <p class="setting-description">Press F12 to open developer tools</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-label">User Agent</label>
+                            <input type="text" class="setting-input" id="user-agent" placeholder="Default" readonly>
+                            <p class="setting-description">Browser identification string</p>
+                        </div>
+
+                        <div class="setting-group">
+                            <label class="setting-button-group">
+                                <button class="setting-button" id="reset-settings">Reset to Defaults</button>
+                            </label>
+                            <p class="setting-description">Restore all settings to their default values</p>
+                        </div>
+                    </div>
+
+                    <!-- Features Section -->
+                    <div class="settings-section" id="section-features">
+                        <h3>Features</h3>
+
+                        <!-- Grammar Assistant -->
+                        <div class="setting-group grammar-assistant-group" id="grammar-assistant-group">
+                            <label class="setting-toggle grammar-toggle-row">
+                                <div class="grammar-toggle-info">
+                                    <span class="grammar-icon-wrap">✍️</span>
+                                    <div>
+                                        <strong>Grammar Assistant</strong>
+                                        <span id="grammar-assistant-status" class="grammar-status-badge grammar-status-off">Off</span>
+                                    </div>
+                                </div>
+                                <input type="checkbox" id="grammar-assistant-toggle">
+                                <span class="toggle-slider grammar-slider"></span>
+                            </label>
+                            <p class="setting-description">
+                                Real-time spelling, grammar, style &amp; punctuation checks on every text field —
+                                powered by LanguageTool. Works on any website, online notepad, typing test, or
+                                classroom tool. Highlights errors with coloured underlines and rewrites words
+                                in-place when you click a suggestion. Fully stealth — invisible to proctoring software.
+                            </p>
+                            <div class="grammar-legend" id="grammar-legend">
+                                <span class="grammar-legend-dot" style="background:#ef4444"></span><span>Spelling</span>
+                                <span class="grammar-legend-dot" style="background:#f59e0b"></span><span>Grammar</span>
+                                <span class="grammar-legend-dot" style="background:#3b82f6"></span><span>Style</span>
+                                <span class="grammar-legend-dot" style="background:#a855f7"></span><span>Punctuation</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- About Section -->
+                    <div class="settings-section" id="section-about">
+                        <h3>About Proton Browser</h3>
+                        
+                        <div class="about-info">
+                            <img src="assets/logo.svg" alt="Proton Browser" class="about-logo">
+                            <h2>Proton Browser</h2>
+                            <p class="version">Version 1.0.0</p>
+                            <p class="tagline">Lightning-Fast Speed • Military-Grade Security • Complete Privacy</p>
+                            
+                            <div class="about-details">
+                                <div class="about-item">
+                                    <strong>🛡️ Screenshot Protection:</strong>
+                                    <span class="status-active">Active</span>
+                                </div>
+                                <div class="about-item">
+                                    <strong>⚡ Performance Mode:</strong>
+                                    <span class="status-active">Enabled</span>
+                                </div>
+                                <div class="about-item">
+                                    <strong>🚫 Ad Blocker:</strong>
+                                    <span class="status-active">Running</span>
+                                </div>
+                                <div class="about-item">
+                                    <strong>Based on:</strong>
+                                    <span>Electron & Chromium</span>
+                                </div>
+                            </div>
+
+                            <div class="about-buttons">
+                                <button class="about-button">Check for Updates</button>
+                                <button class="about-button">View License</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Welcome Screen (shown on new tab) -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-content">
+            <div class="logo-container">
+                <img src="assets/logo.svg" alt="Proton Browser" class="main-logo">
+            </div>
+            <h1 class="browser-title">Proton Browser</h1>
+            <p class="tagline">Lightning-Fast Speed • Military-Grade Security • Complete Privacy</p>
+            <div class="search-box">
+                <input type="text" id="welcome-search" placeholder="Search the web or enter address" />
+            </div>
+            <div class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>Screenshot Protection</h3>
+                    <p>Third-party apps cannot capture your screen</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🚫</div>
+                    <h3>Ad Blocker</h3>
+                    <p>Built-in ad and tracker blocking</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Fast & Secure</h3>
+                    <p>Based on Chromium for speed and security</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VPN Panel -->
+    <div id="vpn-panel" class="side-panel vpn-panel" style="display: none;">
+        <div class="panel-header vpn-header">
+            <div class="vpn-header-content">
+                <h2>🛡️ Proton VPN</h2>
+                <div class="vpn-connection-status">
+                    <span class="vpn-status-indicator" id="vpn-status-indicator">●</span>
+                    <span id="vpn-status-text">Disconnected</span>
+                </div>
+            </div>
+            <button class="panel-close" id="vpn-close">✕</button>
+        </div>
+
+        <div class="panel-body vpn-body">
+            <!-- VPN Connection Card -->
+            <div class="vpn-connection-card">
+                <div class="vpn-quick-connect">
+                    <button id="vpn-connect-btn" class="vpn-connect-button">
+                        <span class="vpn-connect-icon">🚀</span>
+                        <span class="vpn-connect-text">Quick Connect</span>
+                    </button>
+                    <div class="vpn-selected-server" id="vpn-selected-server">
+                        <div class="server-flag">🌍</div>
+                        <div class="server-info">
+                            <div class="server-name">Select a server</div>
+                            <div class="server-location">No server selected</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Stats (Hidden when disconnected) -->
+                <div class="vpn-stats" id="vpn-stats" style="display: none;">
+                    <div class="vpn-stat-item">
+                        <span class="stat-label">⬆️ Upload</span>
+                        <span class="stat-value" id="vpn-upload">0 KB/s</span>
+                    </div>
+                    <div class="vpn-stat-item">
+                        <span class="stat-label">⬇️ Download</span>
+                        <span class="stat-value" id="vpn-download">0 KB/s</span>
+                    </div>
+                    <div class="vpn-stat-item">
+                        <span class="stat-label">⏱️ Duration</span>
+                        <span class="stat-value" id="vpn-duration">00:00:00</span>
+                    </div>
+                    <div class="vpn-stat-item">
+                        <span class="stat-label">📡 Latency</span>
+                        <span class="stat-value" id="vpn-latency">0 ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VPN Features -->
+            <div class="vpn-features">
+                <div class="vpn-feature-item">
+                    <label class="vpn-toggle">
+                        <input type="checkbox" id="vpn-kill-switch" checked>
+                        <span class="vpn-toggle-slider"></span>
+                    </label>
+                    <div class="vpn-feature-info">
+                        <span class="feature-name">Kill Switch</span>
+                        <span class="feature-desc">Block internet if VPN drops</span>
+                    </div>
+                </div>
+                <div class="vpn-feature-item">
+                    <label class="vpn-toggle">
+                        <input type="checkbox" id="vpn-dns-protection" checked>
+                        <span class="vpn-toggle-slider"></span>
+                    </label>
+                    <div class="vpn-feature-info">
+                        <span class="feature-name">DNS Leak Protection</span>
+                        <span class="feature-desc">Prevent DNS leaks</span>
+                    </div>
+                </div>
+                <div class="vpn-feature-item">
+                    <label class="vpn-toggle">
+                        <input type="checkbox" id="vpn-auto-connect">
+                        <span class="vpn-toggle-slider"></span>
+                    </label>
+                    <div class="vpn-feature-info">
+                        <span class="feature-name">Auto-Connect</span>
+                        <span class="feature-desc">Connect on browser start</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Server List -->
+            <div class="vpn-server-section">
+                <div class="vpn-section-header">
+                    <h3>🌍 Server Locations</h3>
+                    <span class="server-count" id="server-count">24 servers</span>
+                </div>
+                
+                <div class="vpn-server-filter">
+                    <input type="text" id="vpn-server-search" placeholder="🔍 Search servers..." />
+                    <select id="vpn-server-sort">
+                        <option value="country">Country</option>
+                        <option value="latency">Latency</option>
+                        <option value="load">Load</option>
+                    </select>
+                </div>
+
+                <div class="vpn-server-list" id="vpn-server-list">
+                    <!-- Servers will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bookmarks Panel -->
+    <div id="bookmarks-panel" class="side-panel" style="display: none;">
+        <div class="panel-header">
+            <h2>⭐ Bookmarks</h2>
+            <button class="panel-close" id="bookmarks-close">✕</button>
+        </div>
+        <div class="panel-body">
+            <div class="panel-toolbar">
+                <button id="add-bookmark-btn" class="panel-action-btn">
+                    ➕ Add Current Page
+                </button>
+            </div>
+            <div id="bookmarks-list" class="bookmarks-list">
+                <!-- Bookmarks will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Downloads Panel -->
+    <div id="downloads-panel" class="side-panel professional-download-panel" style="display: none;">
+        <div class="panel-header download-header">
+            <div class="download-header-left">
+                <h2>⬇️ Downloads</h2>
+                <div class="download-stats">
+                    <span id="download-count">0 active</span>
+                    <span class="stat-separator">•</span>
+                    <span id="download-speed">0 KB/s</span>
+                </div>
+            </div>
+            <button class="panel-close" id="downloads-close">✕</button>
+        </div>
+        
+        <!-- Download Actions Bar -->
+        <div class="download-actions-bar">
+            <div class="download-filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="downloading">Downloading</button>
+                <button class="filter-btn" data-filter="completed">Completed</button>
+                <button class="filter-btn" data-filter="failed">Failed</button>
+            </div>
+            <div class="download-actions">
+                <button class="action-icon-btn" id="pause-all-btn" title="Pause All">⏸️</button>
+                <button class="action-icon-btn" id="resume-all-btn" title="Resume All">▶️</button>
+                <button class="action-icon-btn" id="clear-completed-btn" title="Clear Completed">🗑️</button>
+            </div>
+        </div>
+
+        <!-- Quick Download Buttons -->
+        <div class="panel-body">
+            <div class="quick-download-section">
+                <button id="youtube-download-btn" class="quick-download-btn youtube-btn">
+                    <span class="btn-icon">📹</span>
+                    <span class="btn-text">YouTube Video</span>
+                </button>
+                <button id="torrent-download-btn" class="quick-download-btn torrent-btn">
+                    <span class="btn-icon">🧲</span>
+                    <span class="btn-text">Torrent</span>
+                </button>
+                <button id="open-downloads-folder-btn" class="quick-download-btn folder-btn">
+                    <span class="btn-icon">📁</span>
+                    <span class="btn-text">Open Folder</span>
+                </button>
+            </div>
+            
+            <div id="downloads-list" class="downloads-list professional-downloads-list">
+                <div class="empty-state">
+                    <div class="empty-icon">📥</div>
+                    <p>No downloads yet</p>
+                    <span class="empty-subtitle">Downloads will appear here automatically</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- YouTube Download Modal -->
+    <div id="youtube-modal" class="modal-panel" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-container" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>📹 Download YouTube Video</h2>
+                <button class="modal-close" id="youtube-modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="download-input-group">
+                    <label>YouTube URL:</label>
+                    <input type="text" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=..." />
+                    <button id="youtube-fetch-btn" class="fetch-btn">Get Video Info</button>
+                </div>
+                <div id="youtube-info" style="display: none;">
+                    <div class="video-preview">
+                        <img id="youtube-thumbnail" src="" alt="Thumbnail" style="width: 100%; border-radius: 8px;" />
+                        <h3 id="youtube-title" style="margin: 12px 0; color: var(--text-primary);"></h3>
+                    </div>
+                    <div class="quality-selector">
+                        <label>Select Quality:</label>
+                        <select id="youtube-quality-select">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <button id="youtube-start-download-btn" class="panel-action-btn" style="margin-top: 16px;">
+                        ⬇️ Start Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Torrent Download Modal -->
+    <div id="torrent-modal" class="modal-panel" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-container" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>🧲 Download Torrent</h2>
+                <button class="modal-close" id="torrent-modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="download-input-group">
+                    <label>Magnet Link or Torrent URL:</label>
+                    <textarea id="torrent-url-input" placeholder="magnet:?xt=urn:btih:..." rows="4"></textarea>
+                    <button id="torrent-start-download-btn" class="panel-action-btn" style="margin-top: 16px;">
+                        ⬇️ Start Torrent Download
+                    </button>
+                </div>
+                <div class="info-box" style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--accent-yellow);">
+                    <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
+                        📌 Torrents will be downloaded to: Downloads/Torrents folder
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Panel -->
+    <div id="history-panel" class="side-panel" style="display: none;">
+        <div class="panel-header">
+            <h2>📜 History</h2>
+            <button class="panel-close" id="history-close">✕</button>
+        </div>
+        <div class="panel-body">
+            <div class="panel-toolbar">
+                <button id="clear-history-btn" class="panel-action-btn danger">
+                    🗑️ Clear All History
+                </button>
+            </div>
+            <div id="history-list" class="history-list">
+                <!-- History will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Find in Page Bar -->
+    <div id="find-bar" class="find-bar" style="display: none;">
+        <input type="text" id="find-input" placeholder="Find in page..." />
+        <div class="find-controls">
+            <span id="find-results">0/0</span>
+            <button id="find-prev" title="Previous">▲</button>
+            <button id="find-next" title="Next">▼</button>
+            <button id="find-close" title="Close">✕</button>
+        </div>
+    </div>
+
+    <!-- Zoom Controls (floating) -->
+    <div id="zoom-controls" class="zoom-popup" style="display: none;">
+        <button id="zoom-out" class="zoom-btn">➖</button>
+        <span id="zoom-level">100%</span>
+        <button id="zoom-in" class="zoom-btn">➕</button>
+        <button id="zoom-reset" class="zoom-btn">↺</button>
+    </div>
+
+    <!-- Keyboard Shortcuts Help -->
+    <div id="shortcuts-panel" class="modal-panel" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2>⌨️ Keyboard Shortcuts</h2>
+                <button class="modal-close" id="shortcuts-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-grid">
+                    <div class="shortcut-section">
+                        <h3>Tabs</h3>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>T</kbd>
+                            <span>New Tab</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>W</kbd>
+                            <span>Close Tab</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>Tab</kbd>
+                            <span>Next Tab</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd>
+                            <span>Previous Tab</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-section">
+                        <h3>Navigation</h3>
+                        <div class="shortcut-item">
+                            <kbd>Alt</kbd> + <kbd>←</kbd>
+                            <span>Back</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Alt</kbd> + <kbd>→</kbd>
+                            <span>Forward</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>F5</kbd> or <kbd>Ctrl</kbd> + <kbd>R</kbd>
+                            <span>Reload</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>L</kbd>
+                            <span>Focus Address Bar</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-section">
+                        <h3>Page</h3>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>F</kbd>
+                            <span>Find in Page</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>P</kbd>
+                            <span>Print</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>+</kbd>
+                            <span>Zoom In</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>-</kbd>
+                            <span>Zoom Out</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>0</kbd>
+                            <span>Reset Zoom</span>
+                        </div>
+                    </div>
+                    <div class="shortcut-section">
+                        <h3>Tools</h3>
+                        <div class="shortcut-item">
+                            <kbd>F12</kbd>
+                            <span>Developer Tools</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>H</kbd>
+                            <span>History</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>B</kbd>
+                            <span>Bookmarks</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>J</kbd>
+                            <span>Downloads</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Delete</kbd>
+                            <span>Clear Browsing Data</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Notification -->
+    <div id="update-notification" class="update-notification hidden">
+        <div class="update-content">
+            <div class="update-icon">🔄</div>
+            <div class="update-text">
+                <div class="update-title">Update Available</div>
+                <div class="update-message" id="update-message">A new version is available. Downloading...</div>
+                <div class="update-progress">
+                    <div class="update-progress-bar" id="update-progress-bar"></div>
+                </div>
+            </div>
+            <button class="update-close" id="update-close">✕</button>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
+

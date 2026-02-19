@@ -1,0 +1,121 @@
+{
+  "name": "proton-browser",
+  "version": "1.0.0",
+  "description": "Proton Browser - Ultra-fast secure browser with screenshot protection",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "publish": "electron-builder --win --publish=always",
+    "publish:github": "electron-builder --win --publish=always",
+    "rebuild": "electron-rebuild -f -w screen-protection",
+    "convert-icon": "node convert-icon.js"
+  },
+  "keywords": [
+    "electron",
+    "browser",
+    "secure",
+    "screenshot-protection"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-rebuild": "^3.2.9",
+    "png-to-ico": "^3.0.1"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "electron-updater": "^6.7.3",
+    "ffmpeg-static": "^5.3.0",
+    "node-addon-api": "^7.0.0",
+    "node-gyp": "^10.0.1",
+    "sharp": "^0.33.5",
+    "yt-dlp-wrap": "^2.3.12"
+  },
+  "build": {
+    "appId": "com.protonbrowser.app",
+    "productName": "Proton Browser",
+    "copyright": "Copyright © 2025 Proton Browser",
+    "publish": {
+      "provider": "github",
+      "owner": "YOUR_GITHUB_USERNAME",
+      "repo": "proton-browser"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "build/Release/**",
+      "node_modules/ffmpeg-static/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/logo.ico",
+      "publisherName": "Proton Browser",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "Proton-Browser-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Proton Browser",
+      "installerIcon": "assets/logo.ico",
+      "uninstallerIcon": "assets/logo.ico",
+      "installerHeaderIcon": "assets/logo.ico",
+      "deleteAppDataOnUninstall": false,
+      "displayLanguageSelector": false,
+      "installerLanguages": [
+        "en_US"
+      ]
+    },
+    "mac": {
+      "icon": "assets/logo.png",
+      "category": "public.app-category.utilities",
+      "artifactName": "Proton-Browser-${version}.dmg"
+    },
+    "linux": {
+      "icon": "assets/logo.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "artifactName": "Proton-Browser-${version}.${ext}"
+    },
+    "files": [
+      "**/*",
+      "!website/**/*",
+      "!*.md",
+      "!src/**/*",
+      "!binding.gyp",
+      "!convert-icon.js",
+      "!generate-png-icon.bat",
+      "!.gitignore",
+      "!GITHUB_SETUP.md",
+      "!QUICKSTART.md",
+      "build/Release/screen-protection.node"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets",
+        "filter": [
+          "logo.png",
+          "logo.svg",
+          "logo.ico"
+        ]
+      }
+    ]
+  }
+}
