@@ -1,118 +1,99 @@
 <svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Radial gradient for center glow -->
     <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" style="stop-color:#fcd34d;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#fbbf24;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#bfdbfe;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#60a5fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
     </radialGradient>
-    
-    <!-- Gradient for outer ring -->
+
     <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#93c5fd;stop-opacity:1" />
     </linearGradient>
-    
-    <!-- Gradient for inner elements -->
+
     <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#fcd34d;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#fff7ed;stop-opacity:1" />
+      <stop offset="0%" style="stop-color:#93c5fd;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#eff6ff;stop-opacity:1" />
     </linearGradient>
-    
-    <!-- Orbital paths for particles - representing X, Y, Z axes -->
-    <!-- X-axis orbit: Horizontal ellipse as path -->
+
     <path id="orbitX" d="M 28,128 A 100,40 0 0,1 228,128 A 100,40 0 0,1 28,128 Z" fill="none"/>
-    
-    <!-- Y-axis orbit: Vertical ellipse as path -->
     <path id="orbitY" d="M 128,28 A 40,100 0 0,1 128,228 A 40,100 0 0,1 128,28 Z" fill="none"/>
-    
-    <!-- Z-axis orbit: Diagonal ellipse as path (rotated 45 degrees) -->
     <path id="orbitZ" d="M 128,28 A 100,40 0 0,1 228,128 A 100,40 0 0,1 128,228 A 100,40 0 0,1 28,128 A 100,40 0 0,1 128,28 Z" fill="none"/>
   </defs>
-  
-  <!-- Dark Background Circle -->
-  <circle cx="128" cy="128" r="118" fill="#1a1410" stroke="url(#ringGradient)" stroke-width="4"/>
-  
-  <!-- Orbital Rings - X, Y, Z Axes -->
-  <!-- X-axis: Horizontal ellipse (red-orange tint) -->
-  <ellipse cx="128" cy="128" rx="100" ry="40" 
-           fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.7"/>
-  
-  <!-- Y-axis: Vertical ellipse (yellow tint) -->
-  <ellipse cx="128" cy="128" rx="100" ry="40" 
-           fill="none" stroke="#fbbf24" stroke-width="3" opacity="0.7"
+
+  <!-- Dark navy background circle -->
+  <circle cx="128" cy="128" r="118" fill="#0f1a2e" stroke="url(#ringGradient)" stroke-width="4"/>
+
+  <!-- Orbital Rings -->
+  <ellipse cx="128" cy="128" rx="100" ry="40"
+           fill="none" stroke="#3b82f6" stroke-width="3" opacity="0.7"/>
+
+  <ellipse cx="128" cy="128" rx="100" ry="40"
+           fill="none" stroke="#60a5fa" stroke-width="3" opacity="0.7"
            transform="rotate(90 128 128)"/>
-  
-  <!-- Z-axis: Diagonal ellipse (gold tint, represents depth) -->
-  <ellipse cx="128" cy="128" rx="100" ry="40" 
-           fill="none" stroke="#fcd34d" stroke-width="3" opacity="0.6"
+
+  <ellipse cx="128" cy="128" rx="100" ry="40"
+           fill="none" stroke="#93c5fd" stroke-width="3" opacity="0.6"
            transform="rotate(45 128 128)"/>
-  
-  <!-- Central Proton Core -->
+
+  <!-- Central Core -->
   <circle cx="128" cy="128" r="35" fill="url(#centerGlow)"/>
   <circle cx="128" cy="128" r="35" fill="url(#centerGlow)" opacity="0.5">
     <animate attributeName="r" values="35;38;35" dur="2s" repeatCount="indefinite"/>
   </circle>
-  
+
   <!-- Inner bright core -->
-  <circle cx="128" cy="128" r="22" fill="#fff7ed" opacity="0.9"/>
-  <circle cx="128" cy="128" r="15" fill="#ffffff" opacity="0.8"/>
-  
+  <circle cx="128" cy="128" r="22" fill="#eff6ff" opacity="0.9"/>
+  <circle cx="128" cy="128" r="15" fill="#ffffff" opacity="0.85"/>
+
   <!-- Letter P -->
-  <path d="M 118 110 L 118 146 M 118 110 L 133 110 Q 143 110 143 120 Q 143 130 133 130 L 118 130" 
-        stroke="#1a1410" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  
-  <!-- Orbital particles - Traveling on X, Y, Z axes -->
-  <!-- X-axis particles (Horizontal orbit) -->
-  <circle r="8" fill="#fbbf24">
+  <path d="M 118 110 L 118 146 M 118 110 L 133 110 Q 143 110 143 120 Q 143 130 133 130 L 118 130"
+        stroke="#0f1a2e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Orbital particles -->
+  <circle r="8" fill="#60a5fa">
     <animateMotion dur="4s" repeatCount="indefinite">
       <mpath href="#orbitX"/>
     </animateMotion>
   </circle>
-  
-  <circle r="7" fill="#fcd34d">
+  <circle r="7" fill="#93c5fd">
     <animateMotion dur="4s" repeatCount="indefinite" begin="2s">
       <mpath href="#orbitX"/>
     </animateMotion>
   </circle>
-  
-  <!-- Y-axis particles (Vertical orbit) -->
-  <circle r="8" fill="#fbbf24">
+
+  <circle r="8" fill="#60a5fa">
     <animateMotion dur="3.5s" repeatCount="indefinite">
       <mpath href="#orbitY"/>
     </animateMotion>
   </circle>
-  
-  <circle r="7" fill="#fcd34d">
+  <circle r="7" fill="#93c5fd">
     <animateMotion dur="3.5s" repeatCount="indefinite" begin="1.75s">
       <mpath href="#orbitY"/>
     </animateMotion>
   </circle>
-  
-  <!-- Z-axis particles (Diagonal orbit for depth) -->
-  <circle r="8" fill="#fbbf24">
+
+  <circle r="8" fill="#60a5fa">
     <animateMotion dur="3s" repeatCount="indefinite">
       <mpath href="#orbitZ"/>
     </animateMotion>
   </circle>
-  
-  <circle r="7" fill="#fcd34d">
+  <circle r="7" fill="#93c5fd">
     <animateMotion dur="3s" repeatCount="indefinite" begin="1.5s">
       <mpath href="#orbitZ"/>
     </animateMotion>
   </circle>
-  
-  <!-- Energy waves/speed lines -->
-  <path d="M 40 128 L 50 128" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
-  <path d="M 35 118 L 47 118" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  <path d="M 35 138 L 47 138" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  
-  <path d="M 206 128 L 216 128" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
-  <path d="M 209 118 L 221 118" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  <path d="M 209 138 L 221 138" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  
-  <!-- Shine effects -->
-  <circle cx="115" cy="115" r="4" fill="white" opacity="0.6"/>
+
+  <!-- Speed lines -->
+  <path d="M 40 128 L 50 128" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 35 118 L 47 118" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+  <path d="M 35 138 L 47 138" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+
+  <path d="M 206 128 L 216 128" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 209 118 L 221 118" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+  <path d="M 209 138 L 221 138" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+
+  <!-- Shine -->
+  <circle cx="115" cy="115" r="4" fill="white" opacity="0.65"/>
   <circle cx="140" cy="120" r="3" fill="white" opacity="0.5"/>
 </svg>
-

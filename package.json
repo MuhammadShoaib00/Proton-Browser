@@ -1,12 +1,13 @@
 {
   "name": "proton-browser",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Proton Browser - Ultra-fast secure browser with screenshot protection",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
+    "create-installer-assets": "node create-installer-assets.js",
+    "build": "node create-installer-assets.js && electron-builder",
+    "build:win": "node create-installer-assets.js && electron-builder --win",
     "publish": "electron-builder --win --publish=always",
     "publish:github": "electron-builder --win --publish=always",
     "rebuild": "electron-rebuild -f -w screen-protection",
@@ -21,8 +22,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
     "electron-rebuild": "^3.2.9",
     "png-to-ico": "^3.0.1"
   },
@@ -62,12 +63,14 @@
       ],
       "icon": "assets/logo.ico",
       "publisherName": "Proton Browser",
-      "requestedExecutionLevel": "asInvoker",
+      "requestedExecutionLevel": "requireAdministrator",
       "artifactName": "Proton-Browser-Setup-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
+      "removeDefaultUninstallWelcomePage": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Proton Browser",
@@ -78,7 +81,9 @@
       "displayLanguageSelector": false,
       "installerLanguages": [
         "en_US"
-      ]
+      ],
+      "uninstallDisplayName": "Proton Browser",
+      "include": "installer.nsh"
     },
     "mac": {
       "icon": "assets/logo.png",

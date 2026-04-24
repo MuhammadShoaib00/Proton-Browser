@@ -36,6 +36,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setScreenProtection: (enable) => ipcRenderer.invoke('set-screen-protection', enable),
   getScreenProtection: () => ipcRenderer.invoke('get-screen-protection'),
   // App version
-  getVersion: () => ipcRenderer.invoke('get-version')
+  getVersion: () => ipcRenderer.invoke('get-version'),
+  // Stealth mode
+  getStealthConfig: () => ipcRenderer.invoke('get-stealth-config'),
+  setStealthMode: (enabled) => ipcRenderer.invoke('set-stealth-mode', enabled),
+  setSecretCode: (code) => ipcRenderer.invoke('set-secret-code', code),
+  showWindow: () => ipcRenderer.invoke('show-window'),
+  getHotkey: () => ipcRenderer.invoke('get-hotkey'),
+  setHotkey: (key) => ipcRenderer.invoke('set-hotkey', key),
+  getUserAgent: () => ipcRenderer.invoke('get-user-agent')
 });
 

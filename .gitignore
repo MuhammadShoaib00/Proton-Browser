@@ -24,6 +24,9 @@ yarn-error.log*
 Thumbs.db
 desktop.ini
 
+# Claude Code (AI session memory — local only)
+.claude/
+
 # IDE
 .vscode/
 .idea/
@@ -47,6 +50,9 @@ out/
 # Testing
 coverage/
 .nyc_output/
+
+# Generated installer images (recreated by create-installer-assets.js)
+assets/installer-*.bmp
 
 # Temporary files
 *.tmp

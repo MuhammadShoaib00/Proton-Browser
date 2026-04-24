@@ -116,7 +116,7 @@ class TabManager {
         webview.className = 'webview';
         webview.setAttribute('partition', 'persist:secure');
         webview.setAttribute('allowpopups', '');
-        webview.setAttribute('useragent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ProtonBrowser/1.0');
+        webview.setAttribute('useragent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36');
         // Performance optimizations
         webview.setAttribute('disablewebsecurity', '');
         webview.setAttribute('webpreferences', 'allowRunningInsecureContent, javascript=yes');
@@ -2489,6 +2489,12 @@ class TabManager {
         // ── Grammar Assistant Toggle ─────────────────────────────────────────
         this.initGrammarAssistantToggle();
 
+        // ── Stealth Mode ─────────────────────────────────────────────────────
+        this.initStealthToggle();
+
+        // ── Quick Toggle Hotkey ───────────────────────────────────────────────
+        this.initHotkey();
+
         // ── Check for Updates Button ─────────────────────────────────────────
         this.initUpdateCheckButton();
 
@@ -2575,6 +2581,133 @@ class TabManager {
             } else {
                 this._grammarDisableAllWebviews();
                 this._showGrammarToast(false);
+            }
+        });
+    }
+
+    async initStealthToggle() {
+        const toggle   = document.getElementById('stealth-mode-toggle');
+        const badge    = document.getElementById('stealth-badge');
+        const codeInput = document.getElementById('stealth-code-input');
+        const saveBtn  = document.getElementById('stealth-code-save');
+        const runCmd   = document.getElementById('stealth-run-cmd');
+
+        if (!toggle || !window.electronAPI) return;
+
+        // Load current config from main process
+        try {
+            const cfg = await window.electronAPI.getStealthConfig();
+            toggle.checked = cfg.stealthMode;
+            if (codeInput) codeInput.value = cfg.secretCode || '';
+            this._applyStealthUI(badge, cfg.stealthMode);
+            if (runCmd) runCmd.textContent = `${cfg.secretCode || 'protonbrowser'}://`;
+        } catch (e) {}
+
+        toggle.addEventListener('change', async () => {
+            const on = toggle.checked;
+            this._applyStealthUI(badge, on);
+            try { await window.electronAPI.setStealthMode(on); } catch (e) {}
+        });
+
+        if (saveBtn && codeInput) {
+            saveBtn.addEventListener('click', async () => {
+                const code = codeInput.value.trim();
+                try {
+                    const result = await window.electronAPI.setSecretCode(code);
+                    if (result.success) {
+                        if (runCmd) runCmd.textContent = `${code}://`;
+                        saveBtn.textContent = '✓ Saved';
+                        saveBtn.style.background = '#34a853';
+                        setTimeout(() => {
+                            saveBtn.textContent = 'Save';
+                            saveBtn.style.background = '';
+                        }, 2000);
+                    } else {
+                        saveBtn.textContent = 'Invalid';
+                        saveBtn.style.background = '#ea4335';
+                        setTimeout(() => {
+                            saveBtn.textContent = 'Save';
+                            saveBtn.style.background = '';
+                        }, 2000);
+                    }
+                } catch (e) {}
+            });
+
+            // Update hint live as user types
+            codeInput.addEventListener('input', () => {
+                const val = codeInput.value.trim();
+                if (runCmd && val.length >= 3) runCmd.textContent = `${val}://`;
+            });
+        }
+    }
+
+    _applyStealthUI(badge, enabled) {
+        if (!badge) return;
+        badge.textContent = enabled ? 'On' : 'Off';
+        badge.className = 'stealth-badge ' + (enabled ? 'stealth-on' : 'stealth-off');
+    }
+
+    async initHotkey() {
+        const input     = document.getElementById('hotkey-input');
+        const recordBtn = document.getElementById('hotkey-record-btn');
+        const saveBtn   = document.getElementById('hotkey-save-btn');
+        const status    = document.getElementById('hotkey-status');
+        if (!input || !window.electronAPI) return;
+
+        // Load current hotkey
+        try {
+            const { hotkey } = await window.electronAPI.getHotkey();
+            input.value = hotkey || '';
+        } catch (e) {}
+
+        let recording = false;
+
+        const stopRecording = () => {
+            recording = false;
+            recordBtn.textContent = 'Record';
+            recordBtn.style.background = '';
+            input.removeEventListener('keydown', onKey);
+        };
+
+        const onKey = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const parts = [];
+            if (e.ctrlKey)  parts.push('Ctrl');
+            if (e.altKey)   parts.push('Alt');
+            if (e.shiftKey) parts.push('Shift');
+            if (e.metaKey)  parts.push('Super');
+            const k = e.key;
+            if (!['Control','Alt','Shift','Meta'].includes(k)) {
+                if (k === ' ')        parts.push('Space');
+                else if (k.length === 1) parts.push(k.toUpperCase());
+                else                  parts.push(k);
+            }
+            if (parts.length > 1 || (parts.length === 1 && !['Ctrl','Alt','Shift','Super'].includes(parts[0]))) {
+                input.value = parts.join('+');
+                stopRecording();
+            }
+        };
+
+        recordBtn.addEventListener('click', () => {
+            if (recording) { stopRecording(); return; }
+            recording = true;
+            recordBtn.textContent = 'Press keys…';
+            recordBtn.style.background = '#ef4444';
+            input.value = '';
+            status.textContent = '';
+            input.focus();
+            input.addEventListener('keydown', onKey);
+        });
+
+        saveBtn.addEventListener('click', async () => {
+            const key = input.value.trim();
+            if (!key) return;
+            try {
+                const res = await window.electronAPI.setHotkey(key);
+                status.textContent = res.success ? `Shortcut set: ${res.hotkey}` : 'Failed to set shortcut';
+            } catch (e) {
+                status.textContent = 'Error saving shortcut';
             }
         });
     }

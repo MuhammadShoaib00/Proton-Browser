@@ -1,14 +1,312 @@
-const { app, BrowserWindow, ipcMain, session, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, nativeImage, dialog, Tray, Menu, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 let mainWindow;
 let screenProtection;
 let activeDownloads = new Map();
 let YTDlpWrap, WebTorrent, axios;
+let tray = null;
+app.isQuitting = false;
+
+// ── Chromium flags (must be set before app ready) ──────────────────────────
+// Spoof as plain Chrome — removes the "Electron" token that WhatsApp / other
+// sites detect and block.  Electron 34 ships Chromium 132.
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
+app.userAgentFallback = CHROME_UA;
+
+// GPU / hardware acceleration
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-oop-rasterization');
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
+app.commandLine.appendSwitch('enable-accelerated-mjpeg-decode');
+
+// Enable all modern web platform features
+app.commandLine.appendSwitch('enable-features', [
+  'VaapiVideoDecoder',
+  'VaapiVideoEncoder',
+  'UseSkiaRenderer',
+  'WebAssemblyBaseline',
+  'WebAssemblyLazyCompilation',
+  'WebAssemblySimd',
+  'SharedArrayBuffer',
+  'MediaCapabilities',
+  'AudioServiceAudioStreams',
+  'AudioServiceLaunchOnStartup',
+  'PlatformHEVCDecoderSupport',
+  'EnableDrDc',
+  'CanvasOopRasterization',
+  'ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes',
+].join(','));
+
+// Disable features that hurt compatibility
+app.commandLine.appendSwitch('disable-features', [
+  'OutOfBlinkCors',
+  'SameSiteByDefaultCookies',
+  'CookiesWithoutSameSiteMustBeSecure',
+].join(','));
+
+// HTTP/3 + QUIC for faster connections
+app.commandLine.appendSwitch('enable-quic');
+
+// Better JS performance
+app.commandLine.appendSwitch('js-flags', '--harmony --max-old-space-size=4096');
+
+// Autoplay without user gesture (needed for WhatsApp calls, video, etc.)
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// Disable web security for cross-origin requests (power user feature)
+// app.commandLine.appendSwitch('disable-web-security'); // uncomment only if needed
+
+// ── Stealth / Tray config ──────────────────────────────────────────────────
+let stealthConfig = { secretCode: 'protonbrowser', stealthMode: false, hotkey: 'Ctrl+Shift+Space' };
+
+function configPath() {
+  return path.join(app.getPath('userData'), 'proton-stealth.json');
+}
+
+function loadStealthConfig() {
+  try {
+    const p = configPath();
+    if (fs.existsSync(p)) {
+      stealthConfig = { ...stealthConfig, ...JSON.parse(fs.readFileSync(p, 'utf8')) };
+    }
+  } catch (e) {}
+}
+
+function saveStealthConfig() {
+  try {
+    fs.writeFileSync(configPath(), JSON.stringify(stealthConfig, null, 2));
+  } catch (e) {}
+}
+
+// ── PowerShell stealth helpers ─────────────────────────────────────────────
+function runPS(script, extraEnv = {}) {
+  spawnSync('powershell', [
+    '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden',
+    '-ExecutionPolicy', 'Bypass', '-Command', script
+  ], { stdio: 'ignore', env: { ...process.env, ...extraEnv } });
+}
+
+function hideFromWindowsSearch() {
+  if (process.platform !== 'win32') return;
+  runPS(`
+    $appId = 'com.protonbrowser.app'
+
+    # 1. Delete every Proton-named shortcut from all Start Menu and Desktop locations
+    $locs = @(
+      [Environment]::GetFolderPath('StartMenu'),
+      [Environment]::GetFolderPath('CommonStartMenu'),
+      [Environment]::GetFolderPath('Desktop'),
+      [Environment]::GetFolderPath('CommonDesktopDirectory')
+    )
+    foreach ($loc in $locs) {
+      if (Test-Path $loc) {
+        Get-ChildItem -Path $loc -Recurse -ErrorAction SilentlyContinue |
+          Where-Object { $_.Name -like '*Proton*' } |
+          Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+      }
+    }
+
+    # 2. Hide the Uninstall registry entry from Windows Search and Apps list
+    $uninstPaths = @(
+      "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appId",
+      "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appId",
+      "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appId"
+    )
+    foreach ($p in $uninstPaths) {
+      if (Test-Path $p) {
+        Set-ItemProperty $p -Name SystemComponent -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty $p -Name NoDisplay       -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+      }
+    }
+
+    # 3. Remove App Paths (makes app undiscoverable via Run dialog and search)
+    foreach ($p in @(
+      'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Proton Browser.exe',
+      'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Proton Browser.exe'
+    )) { Remove-Item $p -Force -Recurse -ErrorAction SilentlyContinue }
+
+    # 4. Remove HKCR Applications entry Windows auto-creates when app is launched
+    foreach ($p in @(
+      'Registry::HKEY_CLASSES_ROOT\\Applications\\Proton Browser.exe',
+      'HKLM:\\SOFTWARE\\Classes\\Applications\\Proton Browser.exe',
+      'HKCU:\\Software\\Classes\\Applications\\Proton Browser.exe'
+    )) { Remove-Item $p -Force -Recurse -ErrorAction SilentlyContinue }
+
+    # 5. Kill all search/start-menu cache processes — Windows restarts them clean
+    foreach ($proc in @('StartMenuExperienceHost','SearchHost','SearchIndexer')) {
+      Get-Process -Name $proc -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+
+    # 6. Notify Windows Shell that associations changed
+    Start-Process ie4uinit.exe -ArgumentList '-show' -WindowStyle Hidden -ErrorAction SilentlyContinue
+  `);
+}
+
+function showInWindowsSearch() {
+  if (process.platform !== 'win32') return;
+  runPS(`
+    $appId   = 'com.protonbrowser.app'
+    $exePath = $env:PS_EXE_PATH
+    $exeDir  = Split-Path $exePath
+
+    # 1. Restore Uninstall registry visibility
+    foreach ($p in @(
+      "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appId",
+      "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appId",
+      "HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appId"
+    )) {
+      if (Test-Path $p) {
+        Remove-ItemProperty $p -Name SystemComponent -Force -ErrorAction SilentlyContinue
+        Remove-ItemProperty $p -Name NoDisplay       -Force -ErrorAction SilentlyContinue
+      }
+    }
+
+    # 2. Restore App Paths
+    $appPathKey = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Proton Browser.exe'
+    if (!(Test-Path $appPathKey)) { New-Item $appPathKey -Force | Out-Null }
+    Set-ItemProperty $appPathKey -Name '(default)' -Value $exePath -Type String -Force
+    Set-ItemProperty $appPathKey -Name 'Path'      -Value $exeDir  -Type String -Force
+
+    # 3. Flush search cache
+    foreach ($proc in @('StartMenuExperienceHost','SearchHost','SearchIndexer')) {
+      Get-Process -Name $proc -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+    Start-Process ie4uinit.exe -ArgumentList '-show' -WindowStyle Hidden -ErrorAction SilentlyContinue
+  `, { PS_EXE_PATH: process.execPath });
+}
+
+function isValidCode(code) {
+  return typeof code === 'string' && /^[a-zA-Z][a-zA-Z0-9]{2,19}$/.test(code);
+}
+
+function registerHotkey() {
+  const key = stealthConfig.hotkey;
+  if (!key) return;
+  try {
+    globalShortcut.register(key, () => {
+      if (mainWindow && mainWindow.isVisible()) {
+        mainWindow.hide();
+        if (!stealthConfig.stealthMode) createTray();
+        else destroyTray();
+      } else {
+        showWindow();
+        destroyTray();
+      }
+    });
+  } catch (e) {
+    console.error('Failed to register hotkey:', key, e.message);
+  }
+}
+
+function unregisterHotkey() {
+  try {
+    if (stealthConfig.hotkey) globalShortcut.unregister(stealthConfig.hotkey);
+  } catch (e) {}
+}
+
+function registerProtocol(code) {
+  if (isValidCode(code)) {
+    app.setAsDefaultProtocolClient(code);
+  }
+}
+
+function unregisterProtocol(code) {
+  if (isValidCode(code)) {
+    try { app.removeAsDefaultProtocolClient(code); } catch (e) {}
+  }
+}
+
+// ── Shortcut management ────────────────────────────────────────────────────
+function deleteShortcuts() {
+  if (process.platform !== 'win32') return;
+  // Use PowerShell with GetFolderPath so we always hit the correct system paths
+  // regardless of locale or Windows edition
+  runPS(`
+    $locs = @(
+      [Environment]::GetFolderPath('StartMenu'),
+      [Environment]::GetFolderPath('CommonStartMenu'),
+      [Environment]::GetFolderPath('Desktop'),
+      [Environment]::GetFolderPath('CommonDesktopDirectory')
+    )
+    foreach ($loc in $locs) {
+      if (Test-Path $loc) {
+        Get-ChildItem -Path $loc -Recurse -ErrorAction SilentlyContinue |
+          Where-Object { $_.Name -like '*Proton*' } |
+          Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+      }
+    }
+  `);
+}
+
+function recreateShortcuts() {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  runPS(`
+    $exePath = $env:PS_EXE_PATH
+    $WShell  = New-Object -ComObject WScript.Shell
+
+    $smDir = Join-Path ([Environment]::GetFolderPath('CommonStartMenu')) 'Programs\\Proton Browser'
+    if (!(Test-Path $smDir)) { New-Item $smDir -ItemType Directory -Force | Out-Null }
+    $sc = $WShell.CreateShortcut((Join-Path $smDir 'Proton Browser.lnk'))
+    $sc.TargetPath  = $exePath
+    $sc.Description = 'Proton Browser'
+    $sc.Save()
+
+    $desktop = [Environment]::GetFolderPath('Desktop')
+    $sc2 = $WShell.CreateShortcut((Join-Path $desktop 'Proton Browser.lnk'))
+    $sc2.TargetPath  = $exePath
+    $sc2.Description = 'Proton Browser'
+    $sc2.Save()
+  `, { PS_EXE_PATH: process.execPath });
+}
+
+function createTray() {
+  if (tray) return;
+  try {
+    const iconPath = path.join(__dirname, 'assets', 'logo.png');
+    const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+    tray = new Tray(icon);
+    tray.setToolTip('Proton Browser — click to open');
+    const menu = Menu.buildFromTemplate([
+      { label: 'Open Proton Browser', click: showWindow },
+      { type: 'separator' },
+      { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
+    ]);
+    tray.setContextMenu(menu);
+    tray.on('click', showWindow);
+    tray.on('double-click', showWindow);
+  } catch (e) {
+    console.error('Tray creation failed:', e);
+  }
+}
+
+function destroyTray() {
+  if (tray) { tray.destroy(); tray = null; }
+}
+
+function showWindow() {
+  if (mainWindow) {
+    mainWindow.setSkipTaskbar(true);
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function hideWindow() {
+  if (!mainWindow) return;
+  mainWindow.hide();
+  if (stealthConfig.stealthMode) {
+    destroyTray(); // complete stealth — no tray, no taskbar
+  } else {
+    createTray(); // hide to tray
+  }
+}
 
 // ffmpeg-static provides a bundled ffmpeg binary (used by yt-dlp for merging)
 let ffmpegPath = '';
@@ -105,7 +403,8 @@ function createWindow() {
     },
     title: 'Proton Browser',
     icon: appIcon,
-    backgroundColor: '#1a1410',
+    backgroundColor: '#202124',
+    skipTaskbar: true,
     frame: false, // Custom frameless window
     transparent: false,
     minWidth: 800,
@@ -125,6 +424,23 @@ function createWindow() {
 
   // Enable content protection (Electron built-in) — default ON
   mainWindow.setContentProtection(true);
+
+  // Minimize → hide to tray instead of shrinking to taskbar
+  mainWindow.on('minimize', () => {
+    mainWindow.hide();
+    if (!stealthConfig.stealthMode) createTray();
+    else destroyTray();
+  });
+
+  // In stealth mode: hide instead of quit so secret-code can reopen.
+  // In normal mode: let the close proceed — app will quit via window-all-closed.
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting && stealthConfig.stealthMode) {
+      event.preventDefault();
+      mainWindow.hide();
+      destroyTray();
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -206,36 +522,93 @@ function setupDownloadHandler() {
   });
 }
 
-app.on('ready', () => {
-  // Set up session permissions
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowedPermissions = ['notifications', 'media', 'geolocation'];
-    if (allowedPermissions.includes(permission)) {
-      callback(true);
+// Single-instance lock — needed so Win+R protocol launch reaches the running app
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, argv) => {
+    // Check if launched via our secret protocol (e.g. proton2024://)
+    const url = argv.find(a => a.includes('://'));
+    if (url) {
+      const code = url.split('://')[0];
+      if (code === stealthConfig.secretCode) {
+        showWindow();
+      }
     } else {
-      callback(false);
+      showWindow();
     }
   });
+}
 
-  // Block ads and trackers (enhanced for performance)
-  session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
-    const adDomains = [
-      'doubleclick.net', 'googlesyndication.com', 'adservice.google.com',
-      'googleadservices.com', 'facebook.com/tr', 'connect.facebook.net',
-      'analytics.google.com', 'google-analytics.com'
-    ];
-    const url = details.url;
-    const shouldBlock = adDomains.some(domain => url.includes(domain));
-    callback({ cancel: shouldBlock });
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
+
+app.on('ready', () => {
+  // Load stealth config and register the secret protocol
+  loadStealthConfig();
+  registerProtocol(stealthConfig.secretCode);
+  registerHotkey();
+  // Enforce shortcut + registry visibility based on saved stealth state
+  if (stealthConfig.stealthMode) {
+    deleteShortcuts();
+    hideFromWindowsSearch();
+  }
+
+  // ── User-Agent: strip "Electron" so sites like WhatsApp see plain Chrome ──
+  session.defaultSession.setUserAgent(CHROME_UA);
+
+  // Also override the UA header on every outgoing request
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['*://*/*'] }, (details, callback) => {
+    details.requestHeaders['User-Agent'] = CHROME_UA;
+    callback({ requestHeaders: details.requestHeaders });
   });
 
-  // Enable hardware acceleration and GPU
-  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder');
-  app.commandLine.appendSwitch('ignore-gpu-blocklist');
-  app.commandLine.appendSwitch('enable-gpu-rasterization');
-  app.commandLine.appendSwitch('enable-zero-copy');
+  // ── Permissions: allow everything a real browser would grant ──────────────
+  const ALLOW_ALL_PERMISSIONS = [
+    'notifications', 'media', 'geolocation', 'mediaKeySystem',
+    'midi', 'midiSysex', 'pointerLock', 'fullscreen',
+    'openExternal', 'clipboard-sanitized-write', 'clipboard-read',
+    'display-capture', 'idle-detection', 'payment', 'speaker-selection',
+    'window-placement', 'local-fonts', 'ambient-light-sensor',
+    'background-sync', 'background-fetch', 'persistent-storage',
+    'periodic-background-sync', 'push',
+  ];
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(true); // allow all — same as any real browser default
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    return true; // pre-approve all permission checks
+  });
+
+  // ── Ad / tracker blocker (whitelists messaging & social services) ─────────
+  const AD_DOMAINS = [
+    'doubleclick.net', 'googlesyndication.com', 'adservice.google.com',
+    'googleadservices.com', 'google-analytics.com', 'analytics.google.com',
+    'adnxs.com', 'moatads.com', 'rubiconproject.com', 'pubmatic.com',
+    'openx.net', 'advertising.com', 'taboola.com', 'outbrain.com',
+  ];
+  // Domains that must NEVER be blocked (messaging / auth / CDN)
+  const WHITELIST_DOMAINS = [
+    'whatsapp.com', 'whatsapp.net', 'fbcdn.net',
+    'facebook.com', 'googleapis.com', 'gstatic.com',
+    'telegram.org', 'discord.com', 'slack.com',
+  ];
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+    const url = details.url;
+    const whitelisted = WHITELIST_DOMAINS.some(d => url.includes(d));
+    const blocked     = !whitelisted && AD_DOMAINS.some(d => url.includes(d));
+    callback({ cancel: blocked });
+  });
 
   createWindow();
+
+  // If stealth was already enabled from a previous session, hide immediately
+  if (stealthConfig.stealthMode && mainWindow) {
+    mainWindow.hide();
+    destroyTray();
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -252,7 +625,10 @@ app.on('activate', () => {
 
 // IPC handlers for window controls
 ipcMain.on('window-minimize', () => {
-  if (mainWindow) mainWindow.minimize();
+  if (!mainWindow) return;
+  mainWindow.hide();
+  if (!stealthConfig.stealthMode) createTray();
+  else destroyTray();
 });
 
 ipcMain.on('window-maximize', () => {
@@ -266,12 +642,20 @@ ipcMain.on('window-maximize', () => {
 });
 
 ipcMain.on('window-close', () => {
-  if (mainWindow) mainWindow.close();
+  if (stealthConfig.stealthMode) {
+    // Stealth mode: hide so secret-code can bring it back
+    if (mainWindow) { mainWindow.hide(); destroyTray(); }
+  } else {
+    app.isQuitting = true;
+    app.quit();
+  }
 });
 
 ipcMain.handle('window-is-maximized', () => {
   return mainWindow ? mainWindow.isMaximized() : false;
 });
+
+ipcMain.handle('get-user-agent', () => CHROME_UA);
 
 // ── Screenshot protection toggle ───────────────────────────────────────────
 ipcMain.handle('set-screen-protection', (event, enable) => {
@@ -880,5 +1264,62 @@ ipcMain.handle('quit-and-install', () => {
 
 ipcMain.handle('get-version', () => {
   return app.getVersion();
+});
+
+// ── Stealth mode IPC ──────────────────────────────────────────────────────
+ipcMain.handle('get-stealth-config', () => {
+  return stealthConfig;
+});
+
+ipcMain.handle('set-stealth-mode', (event, enabled) => {
+  stealthConfig.stealthMode = Boolean(enabled);
+  saveStealthConfig();
+  if (enabled) {
+    deleteShortcuts();
+    hideFromWindowsSearch();   // remove from Windows Search + App Paths registry
+    destroyTray();
+    if (mainWindow) {
+      mainWindow.setSkipTaskbar(true);
+      mainWindow.hide();
+    }
+  } else {
+    recreateShortcuts();
+    showInWindowsSearch();     // restore registry so Windows Search finds it again
+    if (mainWindow) {
+      mainWindow.setSkipTaskbar(true);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    createTray();
+  }
+  return stealthConfig;
+});
+
+ipcMain.handle('set-secret-code', (event, code) => {
+  if (!isValidCode(code)) {
+    return { success: false, error: 'Code must be 3–20 letters/numbers, starting with a letter' };
+  }
+  unregisterProtocol(stealthConfig.secretCode);
+  stealthConfig.secretCode = code;
+  saveStealthConfig();
+  registerProtocol(code);
+  return { success: true, secretCode: code };
+});
+
+ipcMain.handle('show-window', () => {
+  showWindow();
+  return { success: true };
+});
+
+ipcMain.handle('get-hotkey', () => {
+  return { hotkey: stealthConfig.hotkey };
+});
+
+ipcMain.handle('set-hotkey', (event, key) => {
+  unregisterHotkey();
+  stealthConfig.hotkey = key || '';
+  saveStealthConfig();
+  if (key) registerHotkey();
+  return { success: true, hotkey: stealthConfig.hotkey };
 });
 
