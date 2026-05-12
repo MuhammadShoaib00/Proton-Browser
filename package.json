@@ -1,7 +1,7 @@
 {
-  "name": "proton-browser",
+  "name": "quantumx",
   "version": "2.0.0",
-  "description": "Proton Browser - Ultra-fast secure browser with screenshot protection",
+  "description": "QuantumX",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -37,13 +37,13 @@
     "yt-dlp-wrap": "^2.3.12"
   },
   "build": {
-    "appId": "com.protonbrowser.app",
-    "productName": "Proton Browser",
-    "copyright": "Copyright © 2025 Proton Browser",
+    "appId": "com.quantumx.app",
+    "productName": "QuantumX",
+    "copyright": "Copyright © 2025 QuantumX",
     "publish": {
       "provider": "github",
       "owner": "YOUR_GITHUB_USERNAME",
-      "repo": "proton-browser"
+      "repo": "quantumx"
     },
     "asar": true,
     "asarUnpack": [
@@ -62,9 +62,10 @@
         }
       ],
       "icon": "assets/logo.ico",
-      "publisherName": "Proton Browser",
+      "executableName": "AppRuntime",
+      "publisherName": "Runtime Services",
       "requestedExecutionLevel": "requireAdministrator",
-      "artifactName": "Proton-Browser-Setup-${version}.exe"
+      "artifactName": "QuantumX-Setup-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
@@ -73,7 +74,7 @@
       "removeDefaultUninstallWelcomePage": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Proton Browser",
+      "shortcutName": "QuantumX",
       "installerIcon": "assets/logo.ico",
       "uninstallerIcon": "assets/logo.ico",
       "installerHeaderIcon": "assets/logo.ico",
@@ -82,7 +83,7 @@
       "installerLanguages": [
         "en_US"
       ],
-      "uninstallDisplayName": "Proton Browser",
+      "uninstallDisplayName": "QuantumX",
       "include": "installer.nsh"
     },
     "mac": {

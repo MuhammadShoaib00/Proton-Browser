@@ -117,9 +117,8 @@ class TabManager {
         webview.setAttribute('partition', 'persist:secure');
         webview.setAttribute('allowpopups', '');
         webview.setAttribute('useragent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36');
-        // Performance optimizations
-        webview.setAttribute('disablewebsecurity', '');
-        webview.setAttribute('webpreferences', 'allowRunningInsecureContent, javascript=yes');
+        // NOTE: disablewebsecurity is intentionally NOT set — it removes the Origin
+        // header that OAuth flows (Google, Facebook, LinkedIn, etc.) require, breaking logins.
 
         // Set initial URL or blank page
         if (tab.url) {
@@ -166,22 +165,26 @@ class TabManager {
             }
         });
 
-        // YouTube download injection on every page load
+        // Inject on every page load
         webview.addEventListener('dom-ready', () => {
+            this.injectChromeFingerprint(webview);
+            this.injectAdBlocker(webview);
             this.injectYouTubeDownloader(webview, tab.id);
             if (localStorage.getItem('proton_grammar_enabled') === 'true') {
                 this.injectGrammarAssistant(webview);
             }
         });
 
-        // Also re-inject on SPA navigation (YouTube is a SPA)
+        // Re-inject on SPA navigation (YouTube, Gmail, etc. are SPAs)
         webview.addEventListener('did-navigate-in-page', () => {
             setTimeout(() => {
+                this.injectChromeFingerprint(webview);
+                this.injectAdBlocker(webview);
                 this.injectYouTubeDownloader(webview, tab.id);
                 if (localStorage.getItem('proton_grammar_enabled') === 'true') {
                     this.injectGrammarAssistant(webview);
                 }
-            }, 1500);
+            }, 500);
         });
 
         // Bidirectional communication with injected script via sessionStorage polling
@@ -1672,6 +1675,41 @@ class TabManager {
         webview.executeJavaScript(script).catch(() => {});
     }
 
+    // Backup fingerprint fix applied at dom-ready.
+    // The primary fix is fingerprint-preload.js (runs before page scripts via
+    // will-attach-webview). This backup handles SPA navigations and late-loaded
+    // iframes where the preload hasn't run again.
+    injectChromeFingerprint(webview) {
+        webview.executeJavaScript(`(function(){
+            var brands=[{brand:'Not A Brand',version:'99'},{brand:'Google Chrome',version:'132'},{brand:'Chromium',version:'132'}];
+            try{Object.defineProperty(navigator,'userAgentData',{value:{brands:brands,mobile:false,platform:'Windows',
+                getHighEntropyValues:function(){return Promise.resolve({architecture:'x86',bitness:'64',brands:brands,
+                    fullVersionList:[{brand:'Not A Brand',version:'99.0.0.0'},{brand:'Google Chrome',version:'132.0.6834.110'},{brand:'Chromium',version:'132.0.6834.110'}],
+                    mobile:false,model:'',platform:'Windows',platformVersion:'15.0.0',uaFullVersion:'132.0.6834.110',wow64:false});},
+                toJSON:function(){return{brands:brands,mobile:false,platform:'Windows'};}},configurable:true});}catch(e){}
+            try{Object.defineProperty(navigator,'vendor',{get:function(){return'Google Inc.';},configurable:true});}catch(e){}
+            try{delete window.electron;}catch(e){}
+            try{if(typeof process!=='undefined'&&process.versions){
+                Object.defineProperty(process.versions,'electron',{get:function(){return undefined;},configurable:true});
+                Object.defineProperty(process.versions,'node',{get:function(){return undefined;},configurable:true});
+            }}catch(e){}
+            if(!window.chrome)window.chrome={};
+            if(!window.chrome.runtime)window.chrome.runtime={id:undefined,connect:function(){return{onMessage:{addListener:function(){}},postMessage:function(){},disconnect:function(){}};},sendMessage:function(){},onMessage:{addListener:function(){},removeListener:function(){},hasListener:function(){return false;}},onConnect:{addListener:function(){},removeListener:function(){}}};
+            if(!window.chrome.loadTimes)window.chrome.loadTimes=function(){return{requestTime:Date.now()/1000,startLoadTime:Date.now()/1000,commitLoadTime:Date.now()/1000,finishDocumentLoadTime:0,finishLoadTime:0,firstPaintTime:0,firstPaintAfterLoadTime:0,navigationType:'Other',wasFetchedViaSpdy:false,wasNpnNegotiated:true,npnNegotiatedProtocol:'h2',wasAlternateProtocolAvailable:false,connectionInfo:'h2'};};
+            if(!window.chrome.csi)window.chrome.csi=function(){return{startE:Date.now(),onloadT:Date.now(),pageT:performance.now(),tran:15};};
+            if(!window.chrome.app)window.chrome.app={isInstalled:false,getDetails:function(){return null;},getIsInstalled:function(){return false;},runningState:function(){return'cannot_run';}};
+        })();`).catch(() => {});
+    }
+
+    async injectAdBlocker(webview) {
+        try {
+            const url = webview.getURL();
+            if (!url || !url.includes('youtube.com')) return;
+            const script = await window.electronAPI.getAdBlockScript();
+            if (script) webview.executeJavaScript(script).catch(() => {});
+        } catch (e) {}
+    }
+
     injectYouTubeDownloader(webview, tabId) {
         const url = webview.getURL();
         if (!url || (!url.includes('youtube.com/watch') && !url.includes('youtu.be/'))) return;
@@ -2492,6 +2530,9 @@ class TabManager {
         // ── Stealth Mode ─────────────────────────────────────────────────────
         this.initStealthToggle();
 
+        // ── Monitoring Detector ───────────────────────────────────────────────
+        this.initMonitoringDetector();
+
         // ── Quick Toggle Hotkey ───────────────────────────────────────────────
         this.initHotkey();
 
@@ -2600,7 +2641,7 @@ class TabManager {
             toggle.checked = cfg.stealthMode;
             if (codeInput) codeInput.value = cfg.secretCode || '';
             this._applyStealthUI(badge, cfg.stealthMode);
-            if (runCmd) runCmd.textContent = `${cfg.secretCode || 'protonbrowser'}://`;
+            if (runCmd) runCmd.textContent = `${cfg.secretCode || 'quantumx'}://`;
         } catch (e) {}
 
         toggle.addEventListener('change', async () => {
@@ -2639,6 +2680,64 @@ class TabManager {
                 if (runCmd && val.length >= 3) runCmd.textContent = `${val}://`;
             });
         }
+    }
+
+    initMonitoringDetector() {
+        if (!window.electronAPI) return;
+        const badge    = document.getElementById('monitor-badge');
+        const icon     = document.getElementById('monitor-icon');
+        const alert    = document.getElementById('monitor-alert');
+        const appsList = document.getElementById('monitor-apps-list');
+        const desc     = document.getElementById('monitor-desc');
+        const scanBtn  = document.getElementById('monitor-scan-btn');
+        if (!badge) return;
+
+        const applyResult = (apps) => {
+            if (apps && apps.length > 0) {
+                badge.textContent = 'Threat Detected';
+                badge.className = 'stealth-badge stealth-on';
+                badge.style.background = 'rgba(239,68,68,0.2)';
+                badge.style.borderColor = 'rgba(239,68,68,0.4)';
+                badge.style.color = '#ef4444';
+                if (icon) icon.textContent = '⚠️';
+                if (alert) alert.style.display = 'block';
+                if (appsList) appsList.textContent = apps.join(', ');
+                if (desc) desc.textContent = 'Monitoring software is running on this computer.';
+            } else {
+                badge.textContent = 'Safe';
+                badge.className = 'stealth-badge stealth-off';
+                badge.style.background = '';
+                badge.style.borderColor = '';
+                badge.style.color = '';
+                if (icon) icon.textContent = '🛡️';
+                if (alert) alert.style.display = 'none';
+                if (desc) desc.textContent = 'Scans for employee monitoring apps every 30 seconds.';
+            }
+        };
+
+        // Load initial status
+        try {
+            window.electronAPI.getMonitoringStatus().then(r => applyResult(r.apps)).catch(() => {});
+        } catch (e) {}
+
+        // Scan button
+        if (scanBtn) {
+            scanBtn.addEventListener('click', async () => {
+                scanBtn.textContent = 'Scanning…';
+                scanBtn.disabled = true;
+                try {
+                    const r = await window.electronAPI.checkMonitoringApps();
+                    applyResult(r.apps);
+                } catch (e) {}
+                scanBtn.textContent = 'Scan Now';
+                scanBtn.disabled = false;
+            });
+        }
+
+        // React to periodic background scan events
+        try {
+            window.electronAPI.onMonitoringDetected((data) => applyResult(data.apps));
+        } catch (e) {}
     }
 
     _applyStealthUI(badge, enabled) {
@@ -4442,7 +4541,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupKeyboardShortcuts();
     
     // Show protection status
-    console.log('%c⚡ Proton Browser', 'color: #fbbf24; font-size: 20px; font-weight: bold;');
+    console.log('%c⚡ QuantumX', 'color: #fbbf24; font-size: 20px; font-weight: bold;');
     console.log('%c🔒 Screenshot Protection Active', 'color: #10b981; font-size: 16px; font-weight: bold;');
     console.log('%c🛡️ Built-in VPN with 24 servers worldwide', 'color: #10b981; font-size: 14px;');
     console.log('%c⚡ Lightning-Fast Performance Mode Enabled', 'color: #fcd34d; font-size: 14px;');

@@ -1,118 +1,202 @@
-<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
-    <!-- Radial gradient for center glow -->
-    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" style="stop-color:#fcd34d;stop-opacity:1" />
-      <stop offset="50%" style="stop-color:#fbbf24;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
-    </radialGradient>
-    
-    <!-- Gradient for outer ring -->
-    <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#fbbf24;stop-opacity:1" />
-    </linearGradient>
-    
-    <!-- Gradient for inner elements -->
-    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#fcd34d;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#fff7ed;stop-opacity:1" />
-    </linearGradient>
-    
-    <!-- Orbital paths for particles - representing X, Y, Z axes -->
-    <!-- X-axis orbit: Horizontal ellipse as path -->
-    <path id="orbitX" d="M 28,128 A 100,40 0 0,1 228,128 A 100,40 0 0,1 28,128 Z" fill="none"/>
-    
-    <!-- Y-axis orbit: Vertical ellipse as path -->
-    <path id="orbitY" d="M 128,28 A 40,100 0 0,1 128,228 A 40,100 0 0,1 128,28 Z" fill="none"/>
-    
-    <!-- Z-axis orbit: Diagonal ellipse as path (rotated 45 degrees) -->
-    <path id="orbitZ" d="M 128,28 A 100,40 0 0,1 228,128 A 100,40 0 0,1 128,228 A 100,40 0 0,1 28,128 A 100,40 0 0,1 128,28 Z" fill="none"/>
-  </defs>
-  
-  <!-- Dark Background Circle -->
-  <circle cx="128" cy="128" r="118" fill="#1a1410" stroke="url(#ringGradient)" stroke-width="4"/>
-  
-  <!-- Orbital Rings - X, Y, Z Axes -->
-  <!-- X-axis: Horizontal ellipse (red-orange tint) -->
-  <ellipse cx="128" cy="128" rx="100" ry="40" 
-           fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.7"/>
-  
-  <!-- Y-axis: Vertical ellipse (yellow tint) -->
-  <ellipse cx="128" cy="128" rx="100" ry="40" 
-           fill="none" stroke="#fbbf24" stroke-width="3" opacity="0.7"
-           transform="rotate(90 128 128)"/>
-  
-  <!-- Z-axis: Diagonal ellipse (gold tint, represents depth) -->
-  <ellipse cx="128" cy="128" rx="100" ry="40" 
-           fill="none" stroke="#fcd34d" stroke-width="3" opacity="0.6"
-           transform="rotate(45 128 128)"/>
-  
-  <!-- Central Proton Core -->
-  <circle cx="128" cy="128" r="35" fill="url(#centerGlow)"/>
-  <circle cx="128" cy="128" r="35" fill="url(#centerGlow)" opacity="0.5">
-    <animate attributeName="r" values="35;38;35" dur="2s" repeatCount="indefinite"/>
-  </circle>
-  
-  <!-- Inner bright core -->
-  <circle cx="128" cy="128" r="22" fill="#fff7ed" opacity="0.9"/>
-  <circle cx="128" cy="128" r="15" fill="#ffffff" opacity="0.8"/>
-  
-  <!-- Letter P -->
-  <path d="M 118 110 L 118 146 M 118 110 L 133 110 Q 143 110 143 120 Q 143 130 133 130 L 118 130" 
-        stroke="#1a1410" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  
-  <!-- Orbital particles - Traveling on X, Y, Z axes -->
-  <!-- X-axis particles (Horizontal orbit) -->
-  <circle r="8" fill="#fbbf24">
-    <animateMotion dur="4s" repeatCount="indefinite">
-      <mpath href="#orbitX"/>
-    </animateMotion>
-  </circle>
-  
-  <circle r="7" fill="#fcd34d">
-    <animateMotion dur="4s" repeatCount="indefinite" begin="2s">
-      <mpath href="#orbitX"/>
-    </animateMotion>
-  </circle>
-  
-  <!-- Y-axis particles (Vertical orbit) -->
-  <circle r="8" fill="#fbbf24">
-    <animateMotion dur="3.5s" repeatCount="indefinite">
-      <mpath href="#orbitY"/>
-    </animateMotion>
-  </circle>
-  
-  <circle r="7" fill="#fcd34d">
-    <animateMotion dur="3.5s" repeatCount="indefinite" begin="1.75s">
-      <mpath href="#orbitY"/>
-    </animateMotion>
-  </circle>
-  
-  <!-- Z-axis particles (Diagonal orbit for depth) -->
-  <circle r="8" fill="#fbbf24">
-    <animateMotion dur="3s" repeatCount="indefinite">
-      <mpath href="#orbitZ"/>
-    </animateMotion>
-  </circle>
-  
-  <circle r="7" fill="#fcd34d">
-    <animateMotion dur="3s" repeatCount="indefinite" begin="1.5s">
-      <mpath href="#orbitZ"/>
-    </animateMotion>
-  </circle>
-  
-  <!-- Energy waves/speed lines -->
-  <path d="M 40 128 L 50 128" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
-  <path d="M 35 118 L 47 118" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  <path d="M 35 138 L 47 138" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  
-  <path d="M 206 128 L 216 128" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
-  <path d="M 209 118 L 221 118" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  <path d="M 209 138 L 221 138" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
-  
-  <!-- Shine effects -->
-  <circle cx="115" cy="115" r="4" fill="white" opacity="0.6"/>
-  <circle cx="140" cy="120" r="3" fill="white" opacity="0.5"/>
-</svg>
 
+    <!-- Clip everything to the outer circle -->
+    <clipPath id="circ">
+      <circle cx="128" cy="128" r="122"/>
+    </clipPath>
+
+    <!-- Glow filters -->
+    <filter id="glow-xl" x="-80%" y="-80%" width="260%" height="260%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <filter id="glow-md" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="glow-sm" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="3.5"/>
+    </filter>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="5" stdDeviation="10" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+
+    <!-- Deep space background -->
+    <radialGradient id="bg" cx="50%" cy="45%" r="60%">
+      <stop offset="0%"   stop-color="#1E1048"/>
+      <stop offset="60%"  stop-color="#0C0820"/>
+      <stop offset="100%" stop-color="#04060F"/>
+    </radialGradient>
+
+    <!-- Soft inner ambient light -->
+    <radialGradient id="ambient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#5B21B6" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#5B21B6" stop-opacity="0"/>
+    </radialGradient>
+
+    <!--
+      X arm geometry (both arms share the same rect, just rotated differently):
+        rect  x=12  y=107  width=232  height=42  rx=21
+        center of rect = (128, 128)  ✓
+        arm half-length from center = 116 px
+        tip distance from center    = 116 px  (< circle radius 122)
+        tip positions (±45°): (46,46)  (210,210)  (46,210)  (210,46)
+    -->
+
+    <!-- Arm \ : upper-left=cyan  →  centre=white  →  lower-right=violet -->
+    <linearGradient id="gA" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%"   stop-color="#06B6D4"/>
+      <stop offset="38%"  stop-color="#A5F3FC"/>
+      <stop offset="50%"  stop-color="#FFFFFF"/>
+      <stop offset="62%"  stop-color="#DDD6FE"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+
+    <!-- Arm / : upper-right=amber →  centre=white  →  lower-left=rose -->
+    <linearGradient id="gB" x1="100%" y1="50%" x2="0%" y2="50%">
+      <stop offset="0%"   stop-color="#F59E0B"/>
+      <stop offset="38%"  stop-color="#FDE68A"/>
+      <stop offset="50%"  stop-color="#FFFFFF"/>
+      <stop offset="62%"  stop-color="#FBCFE8"/>
+      <stop offset="100%" stop-color="#F43F5E"/>
+    </linearGradient>
+
+    <!-- Glow overlay: same colours but transparent, bigger, blurred -->
+    <linearGradient id="gAg" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%"   stop-color="#06B6D4" stop-opacity="0.8"/>
+      <stop offset="50%"  stop-color="#FFFFFF"  stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#7C3AED"  stop-opacity="0.8"/>
+    </linearGradient>
+    <linearGradient id="gBg" x1="100%" y1="50%" x2="0%" y2="50%">
+      <stop offset="0%"   stop-color="#F59E0B" stop-opacity="0.8"/>
+      <stop offset="50%"  stop-color="#FFFFFF"  stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#F43F5E"  stop-opacity="0.8"/>
+    </linearGradient>
+
+    <!-- Centre burst -->
+    <radialGradient id="burst" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="25%"  stop-color="#FEF9C3"/>
+      <stop offset="60%"  stop-color="#FDE68A" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0"/>
+    </radialGradient>
+
+  </defs>
+
+  <!-- ── Outer drop shadow ── -->
+  <circle cx="128" cy="133" r="118" fill="#000" opacity="0.45" filter="url(#drop)"/>
+
+  <!-- ── Background ── -->
+  <circle cx="128" cy="128" r="122" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="122" fill="url(#ambient)"/>
+
+  <!-- ── Subtle concentric rings in BG ── -->
+  <circle cx="128" cy="128" r="55"  fill="none" stroke="#fff" stroke-width="0.6" opacity="0.05"/>
+  <circle cx="128" cy="128" r="85"  fill="none" stroke="#fff" stroke-width="0.6" opacity="0.04"/>
+  <circle cx="128" cy="128" r="108" fill="none" stroke="#fff" stroke-width="0.6" opacity="0.03"/>
+
+  <!-- ── Star / particle field ── -->
+  <g clip-path="url(#circ)" opacity="0.75">
+    <circle cx="72"  cy="30"  r="1.2" fill="#fff"/>
+    <circle cx="192" cy="24"  r="1.0" fill="#06B6D4"/>
+    <circle cx="230" cy="88"  r="1.2" fill="#fff"/>
+    <circle cx="238" cy="158" r="0.9" fill="#7C3AED"/>
+    <circle cx="200" cy="232" r="1.2" fill="#fff"/>
+    <circle cx="108" cy="238" r="0.9" fill="#F43F5E"/>
+    <circle cx="26"  cy="182" r="1.2" fill="#fff"/>
+    <circle cx="20"  cy="96"  r="0.9" fill="#F59E0B"/>
+    <circle cx="156" cy="18"  r="0.8" fill="#fff"/>
+    <circle cx="44"  cy="136" r="0.7" fill="#06B6D4" opacity="0.6"/>
+    <circle cx="214" cy="122" r="0.7" fill="#7C3AED" opacity="0.6"/>
+    <circle cx="130" cy="240" r="0.8" fill="#fff"/>
+  </g>
+
+  <!-- ════════════════════════════════════════
+       X  ARMS
+       rect  x=12  y=107  w=232  h=42  rx=21
+       centred at (128,128)
+  ════════════════════════════════════════ -->
+  <g clip-path="url(#circ)">
+
+    <!-- ── ARM \ WIDE OUTER GLOW ── -->
+    <rect x="12" y="107" width="232" height="42" rx="21"
+          fill="url(#gAg)" opacity="0.28"
+          filter="url(#glow-xl)"
+          transform="rotate(45 128 128)"/>
+
+    <!-- ── ARM / WIDE OUTER GLOW ── -->
+    <rect x="12" y="107" width="232" height="42" rx="21"
+          fill="url(#gBg)" opacity="0.28"
+          filter="url(#glow-xl)"
+          transform="rotate(-45 128 128)"/>
+
+    <!-- ── ARM \ MEDIUM GLOW ── -->
+    <rect x="12" y="107" width="232" height="42" rx="21"
+          fill="url(#gAg)" opacity="0.55"
+          filter="url(#glow-md)"
+          transform="rotate(45 128 128)"/>
+
+    <!-- ── ARM / MEDIUM GLOW ── -->
+    <rect x="12" y="107" width="232" height="42" rx="21"
+          fill="url(#gBg)" opacity="0.55"
+          filter="url(#glow-md)"
+          transform="rotate(-45 128 128)"/>
+
+    <!-- ── ARM \ CORE ── -->
+    <rect x="12" y="107" width="232" height="42" rx="21"
+          fill="url(#gA)"
+          transform="rotate(45 128 128)"/>
+
+    <!-- ── ARM / CORE ── -->
+    <rect x="12" y="107" width="232" height="42" rx="21"
+          fill="url(#gB)"
+          transform="rotate(-45 128 128)"/>
+
+    <!-- ── ARM \ HIGHLIGHT STRIPE (top edge) ── -->
+    <rect x="12" y="107" width="232" height="10" rx="5"
+          fill="white" opacity="0.20"
+          transform="rotate(45 128 128)"/>
+
+    <!-- ── ARM / HIGHLIGHT STRIPE ── -->
+    <rect x="12" y="107" width="232" height="10" rx="5"
+          fill="white" opacity="0.20"
+          transform="rotate(-45 128 128)"/>
+
+  </g>
+
+  <!-- ════════════════════════════════════════
+       CENTRE BURST
+  ════════════════════════════════════════ -->
+  <!-- Large soft burst glow -->
+  <circle cx="128" cy="128" r="52" fill="url(#burst)" filter="url(#glow-xl)" opacity="0.9"/>
+  <!-- Medium burst -->
+  <circle cx="128" cy="128" r="30" fill="url(#burst)" filter="url(#glow-md)"/>
+  <!-- Core bright dot -->
+  <circle cx="128" cy="128" r="16" fill="white" opacity="0.97"/>
+  <circle cx="128" cy="128" r="8"  fill="white"/>
+
+  <!-- ════════════════════════════════════════
+       TIP  GLOWS  (at each of the 4 arm ends)
+       Approx positions: (46,46) (210,210) (46,210) (210,46)
+  ════════════════════════════════════════ -->
+
+  <!-- Upper-left: cyan -->
+  <circle cx="46"  cy="46"  r="16" fill="#06B6D4" opacity="0.65" filter="url(#glow-md)"/>
+  <circle cx="46"  cy="46"  r="5"  fill="white"   opacity="0.95"/>
+
+  <!-- Lower-right: violet -->
+  <circle cx="210" cy="210" r="16" fill="#7C3AED"  opacity="0.65" filter="url(#glow-md)"/>
+  <circle cx="210" cy="210" r="5"  fill="white"    opacity="0.95"/>
+
+  <!-- Upper-right: amber -->
+  <circle cx="210" cy="46"  r="16" fill="#F59E0B"  opacity="0.65" filter="url(#glow-md)"/>
+  <circle cx="210" cy="46"  r="5"  fill="white"    opacity="0.95"/>
+
+  <!-- Lower-left: rose -->
+  <circle cx="46"  cy="210" r="16" fill="#F43F5E"  opacity="0.65" filter="url(#glow-md)"/>
+  <circle cx="46"  cy="210" r="5"  fill="white"    opacity="0.95"/>
+
+  <!-- ── Outer ring border ── -->
+  <circle cx="128" cy="128" r="121" fill="none"
+          stroke="white" stroke-width="1.5" opacity="0.12"/>
+
+</svg>

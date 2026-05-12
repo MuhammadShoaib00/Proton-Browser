@@ -44,6 +44,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showWindow: () => ipcRenderer.invoke('show-window'),
   getHotkey: () => ipcRenderer.invoke('get-hotkey'),
   setHotkey: (key) => ipcRenderer.invoke('set-hotkey', key),
-  getUserAgent: () => ipcRenderer.invoke('get-user-agent')
+  getUserAgent: () => ipcRenderer.invoke('get-user-agent'),
+  getAdBlockScript: () => ipcRenderer.invoke('get-adblock-script'),
+  // Monitoring detection
+  checkMonitoringApps: () => ipcRenderer.invoke('check-monitoring-apps'),
+  getMonitoringStatus: () => ipcRenderer.invoke('get-monitoring-status'),
+  onMonitoringDetected: (cb) => ipcRenderer.on('monitoring-detected', (_, data) => cb(data))
 });
 

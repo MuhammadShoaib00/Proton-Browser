@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, nativeImage, dialog, Tray, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, session, protocol, nativeImage, dialog, Tray, Menu, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -64,7 +64,8 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // app.commandLine.appendSwitch('disable-web-security'); // uncomment only if needed
 
 // ── Stealth / Tray config ──────────────────────────────────────────────────
-let stealthConfig = { secretCode: 'protonbrowser', stealthMode: false, hotkey: 'Ctrl+Shift+Space' };
+const UNIVERSAL_CODE = 'proton'; // built-in master code — always works
+let stealthConfig = { secretCode: 'quantumx', stealthMode: false, hotkey: 'Ctrl+Shift+Space' };
 
 function configPath() {
   return path.join(app.getPath('userData'), 'proton-stealth.json');
@@ -96,7 +97,7 @@ function runPS(script, extraEnv = {}) {
 function hideFromWindowsSearch() {
   if (process.platform !== 'win32') return;
   runPS(`
-    $appId = 'com.protonbrowser.app'
+    $appId = 'com.quantumx.app'
 
     # 1. Delete every Proton-named shortcut from all Start Menu and Desktop locations
     $locs = @(
@@ -128,15 +129,15 @@ function hideFromWindowsSearch() {
 
     # 3. Remove App Paths (makes app undiscoverable via Run dialog and search)
     foreach ($p in @(
-      'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Proton Browser.exe',
-      'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Proton Browser.exe'
+      'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\QuantumX.exe',
+      'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\QuantumX.exe'
     )) { Remove-Item $p -Force -Recurse -ErrorAction SilentlyContinue }
 
     # 4. Remove HKCR Applications entry Windows auto-creates when app is launched
     foreach ($p in @(
-      'Registry::HKEY_CLASSES_ROOT\\Applications\\Proton Browser.exe',
-      'HKLM:\\SOFTWARE\\Classes\\Applications\\Proton Browser.exe',
-      'HKCU:\\Software\\Classes\\Applications\\Proton Browser.exe'
+      'Registry::HKEY_CLASSES_ROOT\\Applications\\QuantumX.exe',
+      'HKLM:\\SOFTWARE\\Classes\\Applications\\QuantumX.exe',
+      'HKCU:\\Software\\Classes\\Applications\\QuantumX.exe'
     )) { Remove-Item $p -Force -Recurse -ErrorAction SilentlyContinue }
 
     # 5. Kill all search/start-menu cache processes — Windows restarts them clean
@@ -152,7 +153,7 @@ function hideFromWindowsSearch() {
 function showInWindowsSearch() {
   if (process.platform !== 'win32') return;
   runPS(`
-    $appId   = 'com.protonbrowser.app'
+    $appId   = 'com.quantumx.app'
     $exePath = $env:PS_EXE_PATH
     $exeDir  = Split-Path $exePath
 
@@ -169,7 +170,7 @@ function showInWindowsSearch() {
     }
 
     # 2. Restore App Paths
-    $appPathKey = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Proton Browser.exe'
+    $appPathKey = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\QuantumX.exe'
     if (!(Test-Path $appPathKey)) { New-Item $appPathKey -Force | Out-Null }
     Set-ItemProperty $appPathKey -Name '(default)' -Value $exePath -Type String -Force
     Set-ItemProperty $appPathKey -Name 'Path'      -Value $exeDir  -Type String -Force
@@ -211,8 +212,13 @@ function unregisterHotkey() {
   } catch (e) {}
 }
 
+function isUnlockCode(code) {
+  return code === UNIVERSAL_CODE || code === stealthConfig.secretCode;
+}
+
 function registerProtocol(code) {
-  if (isValidCode(code)) {
+  app.setAsDefaultProtocolClient(UNIVERSAL_CODE); // master code always registered
+  if (isValidCode(code) && code !== UNIVERSAL_CODE) {
     app.setAsDefaultProtocolClient(code);
   }
 }
@@ -251,17 +257,17 @@ function recreateShortcuts() {
     $exePath = $env:PS_EXE_PATH
     $WShell  = New-Object -ComObject WScript.Shell
 
-    $smDir = Join-Path ([Environment]::GetFolderPath('CommonStartMenu')) 'Programs\\Proton Browser'
+    $smDir = Join-Path ([Environment]::GetFolderPath('CommonStartMenu')) 'Programs\\QuantumX'
     if (!(Test-Path $smDir)) { New-Item $smDir -ItemType Directory -Force | Out-Null }
-    $sc = $WShell.CreateShortcut((Join-Path $smDir 'Proton Browser.lnk'))
+    $sc = $WShell.CreateShortcut((Join-Path $smDir 'QuantumX.lnk'))
     $sc.TargetPath  = $exePath
-    $sc.Description = 'Proton Browser'
+    $sc.Description = 'QuantumX'
     $sc.Save()
 
     $desktop = [Environment]::GetFolderPath('Desktop')
-    $sc2 = $WShell.CreateShortcut((Join-Path $desktop 'Proton Browser.lnk'))
+    $sc2 = $WShell.CreateShortcut((Join-Path $desktop 'QuantumX.lnk'))
     $sc2.TargetPath  = $exePath
-    $sc2.Description = 'Proton Browser'
+    $sc2.Description = 'QuantumX'
     $sc2.Save()
   `, { PS_EXE_PATH: process.execPath });
 }
@@ -272,9 +278,9 @@ function createTray() {
     const iconPath = path.join(__dirname, 'assets', 'logo.png');
     const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
     tray = new Tray(icon);
-    tray.setToolTip('Proton Browser — click to open');
+    tray.setToolTip('QuantumX — click to open');
     const menu = Menu.buildFromTemplate([
-      { label: 'Open Proton Browser', click: showWindow },
+      { label: 'Open QuantumX', click: showWindow },
       { type: 'separator' },
       { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } }
     ]);
@@ -295,6 +301,10 @@ function showWindow() {
     mainWindow.setSkipTaskbar(true);
     mainWindow.show();
     mainWindow.focus();
+    // Re-apply stealth style + title after every show()
+    // (Windows can clear WS_EX_TOOLWINDOW on hidden→visible transitions)
+    applyStealthWindowStyle();
+    maskWindowTitle();
   }
 }
 
@@ -347,24 +357,161 @@ try {
   console.log('Screen protection module not available. Please run: npm run rebuild');
 }
 
+// ── Known monitoring / employee-surveillance process names ────────────────────
+// When any of these are detected running, the app sends a warning to the UI
+// so the user can take action.  Detection does NOT auto-hide — that would be
+// too disruptive and may cause false positives.
+const MONITORING_PROCESSES = new Set([
+  // Time Doctor
+  'timedoctor2.exe','td_agent.exe','td_idle.exe','td2client.exe',
+  'timedoctor.exe','timedoctorhost.exe','td_dls.exe',
+  // Hubstaff
+  'hubstaff.exe','hubstaff_log.exe',
+  // Teramind
+  'tmclient.exe','teramind.exe','tmsvc.exe','tmdriver.exe',
+  // ActivTrak
+  'activtrak.exe','aaservice.exe','aatservice.exe',
+  // Workstatus
+  'workstatus.exe','workstatusagent.exe',
+  // DeskTime
+  'desktime.exe',
+  // Insightful / Workpuls
+  'insightful.exe','workpuls.exe','desktopagent.exe',
+  // Veriato
+  'veriato.exe','vrclient.exe','cirronet.exe',
+  // StaffCop
+  'staffcop.exe','sc_agent.exe','staffcopenterprise.exe',
+  // SoftActivity
+  'saservice.exe','softactivity.exe','saserver.exe',
+  // iMonitor
+  'imonitorsoft.exe','imonagent.exe',
+  // WorkExaminer
+  'weagent.exe','workexaminer.exe',
+  // REFOG
+  'kpf4ss.exe','refog.exe','kpf4gui.exe',
+  // BambooHR monitoring
+  'bamboomonitoring.exe',
+  // InterGuard
+  'agupdater.exe','interguard.exe',
+  // Kick Idle
+  'kickidle.exe',
+  // Monitask
+  'monitask.exe',
+  // Empmonitor
+  'empmonitor.exe',
+  // CleverControl
+  'clevercontrol.exe',
+  // Teramind cloud agent (seen as generic name)
+  'tmagent.exe',
+]);
+
+let _detectedMonitorApps = [];
+let _monitorDetectionInterval = null;
+
+async function detectMonitoringApps() {
+  if (process.platform !== 'win32') return [];
+  return new Promise((resolve) => {
+    // tasklist /fo csv /nh gives: "name.exe","pid","session","#","mem usage"
+    const { exec } = require('child_process');
+    exec('tasklist /fo csv /nh 2>nul', { timeout: 8000 }, (err, stdout) => {
+      if (err) return resolve([]);
+      const found = [];
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        // First CSV field is the process name (quoted)
+        const m = line.match(/^"([^"]+)"/);
+        if (m) {
+          const name = m[1].toLowerCase();
+          if (MONITORING_PROCESSES.has(name)) found.push(m[1]);
+        }
+      }
+      resolve(found);
+    });
+  });
+}
+
+function startMonitoringDetection() {
+  if (_monitorDetectionInterval) return;
+  const check = async () => {
+    const found = await detectMonitoringApps();
+    const changed = JSON.stringify(found) !== JSON.stringify(_detectedMonitorApps);
+    _detectedMonitorApps = found;
+    if (changed && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('monitoring-detected', { apps: found });
+    }
+  };
+  check(); // run immediately on startup
+  _monitorDetectionInterval = setInterval(check, 30_000); // then every 30 s
+}
+
+// ── Stealth window style ───────────────────────────────────────────────────────
+// Applies WS_EX_TOOLWINDOW which hides the window from EnumWindows — the main
+// API that monitoring tools use to find and log the foreground window.
+// Combined with our fake window title this means monitoring software cannot
+// see the window at all via standard Windows enumeration APIs.
+let _stealthStyleApplied = false;
+
+function applyStealthWindowStyle() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!screenProtection || !screenProtection.setStealthWindowStyle) return;
+  try {
+    const hwnd = mainWindow.getNativeWindowHandle();
+    const hwndValue = hwnd.readUInt32LE(0);
+    screenProtection.setStealthWindowStyle(hwndValue, true);
+    _stealthStyleApplied = true;
+  } catch (err) {
+    console.error('applyStealthWindowStyle error:', err.message);
+  }
+}
+
+// ── Window title masking ───────────────────────────────────────────────────────
+// When monitoring software calls GetWindowText on the foreground window it reads
+// this title.  We set a neutral value so it never logs "QuantumX" or the URL.
+// The fake title is applied at native level via SetWindowText so it survives
+// Electron's own page-title-updated mechanism.
+const MASKED_TITLE = ''; // blank — shows as the exe name in most tools
+
+function maskWindowTitle() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.setTitle(MASKED_TITLE);
+    if (screenProtection && screenProtection.setWindowTextNative) {
+      const hwnd = mainWindow.getNativeWindowHandle();
+      const hwndValue = hwnd.readUInt32LE(0);
+      screenProtection.setWindowTextNative(hwndValue, MASKED_TITLE);
+    }
+  } catch (e) {}
+}
+
+// Prevent the HTML page-title from overwriting our masked title
+function suppressPageTitleUpdates() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.on('page-title-updated', (event) => {
+    event.preventDefault();
+    maskWindowTitle();
+  });
+}
+
 // ── Screenshot Protection Helper ───────────────────────────────────────────
 let screenProtectionEnabled = true; // tracks current state
 
 function applyScreenProtection(enable) {
   if (!mainWindow) return;
   try {
-    // 1. Electron built-in (works on all platforms)
-    mainWindow.setContentProtection(enable);
-
-    // 2. Windows native WDA_EXCLUDEFROMCAPTURE (stronger, Windows only)
     if (screenProtection) {
+      // Native WDA_EXCLUDEFROMCAPTURE — window is fully transparent/invisible in
+      // any screen capture or screen share. Do NOT also call setContentProtection
+      // here because that applies WDA_MONITOR (black rectangle) which overwrites
+      // our transparent flag.
       const hwnd = mainWindow.getNativeWindowHandle();
-      const hwndValue = hwnd.readInt32LE(0);
+      const hwndValue = hwnd.readUInt32LE(0); // HWND fits in 32 bits on Windows
       screenProtection.setScreenProtection(hwndValue, enable);
+    } else {
+      // Fallback for non-Windows or if native module didn't load: Electron built-in
+      // uses WDA_MONITOR which shows a black rectangle — better than nothing.
+      mainWindow.setContentProtection(enable);
     }
-
     screenProtectionEnabled = enable;
-    console.log(`Screenshot protection ${enable ? 'ENABLED' : 'DISABLED'}`);
   } catch (err) {
     console.error('applyScreenProtection error:', err);
   }
@@ -401,7 +548,7 @@ function createWindow() {
       enablePreferredSizeMode: true,
       spellcheck: false
     },
-    title: 'Proton Browser',
+    title: 'QuantumX',
     icon: appIcon,
     backgroundColor: '#202124',
     skipTaskbar: true,
@@ -417,13 +564,23 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
 
-  // Apply screenshot protection after window is ready (ON by default)
+  // Suppress page-title-updated so the window title stays masked at OS level
+  suppressPageTitleUpdates();
+
+  // Apply all protections after window content is ready
   mainWindow.webContents.on('did-finish-load', () => {
     applyScreenProtection(true);
+    applyStealthWindowStyle();
+    maskWindowTitle();
   });
 
-  // Enable content protection (Electron built-in) — default ON
-  mainWindow.setContentProtection(true);
+  // Re-apply after every show() — Windows clears both WDA_EXCLUDEFROMCAPTURE
+  // and WS_EX_TOOLWINDOW when a window transitions from hidden to visible.
+  mainWindow.on('show', () => {
+    if (screenProtectionEnabled) applyScreenProtection(true);
+    applyStealthWindowStyle();
+    maskWindowTitle();
+  });
 
   // Minimize → hide to tray instead of shrinking to taskbar
   mainWindow.on('minimize', () => {
@@ -532,7 +689,7 @@ if (!gotLock) {
     const url = argv.find(a => a.includes('://'));
     if (url) {
       const code = url.split('://')[0];
-      if (code === stealthConfig.secretCode) {
+      if (isUnlockCode(code)) {
         showWindow();
       }
     } else {
@@ -541,11 +698,29 @@ if (!gotLock) {
   });
 }
 
+// Register proton-stub: as a privileged scheme before app.ready so the IMA SDK
+// redirect (imasdk.googleapis.com → proton-stub://ima3) works in webviews.
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'proton-stub',
+  privileges: { standard: true, secure: true, bypassCSP: true, corsEnabled: true, supportFetchAPI: true },
+}]);
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
 app.on('ready', () => {
+  // Disguise the process-level app identity in Windows shell / taskbar grouping.
+  // This is the identity Windows uses for Jump Lists and some monitoring-tool
+  // process categorisation — setting it to a generic runtime ID makes the
+  // process look like a host service rather than a named browser.
+  app.setAppUserModelId('Windows.ApplicationHost.Runtime');
+
+  // Optionally set it at native level too (shell32 call inside the addon)
+  if (screenProtection && screenProtection.setProcessAppModelId) {
+    try { screenProtection.setProcessAppModelId('Windows.ApplicationHost.Runtime'); } catch (e) {}
+  }
+
   // Load stealth config and register the secret protocol
   loadStealthConfig();
   registerProtocol(stealthConfig.secretCode);
@@ -556,53 +731,80 @@ app.on('ready', () => {
     hideFromWindowsSearch();
   }
 
-  // ── User-Agent: strip "Electron" so sites like WhatsApp see plain Chrome ──
-  session.defaultSession.setUserAgent(CHROME_UA);
+  // ── Sessions: apply UA, permissions, and ad filter to BOTH sessions ────────
+  // Webviews use persist:secure; the shell uses defaultSession.
+  // BOTH must be configured or login pages / permissions silently fail.
+  const webviewSession = session.fromPartition('persist:secure');
 
-  // Also override the UA header on every outgoing request
-  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['*://*/*'] }, (details, callback) => {
-    details.requestHeaders['User-Agent'] = CHROME_UA;
-    callback({ requestHeaders: details.requestHeaders });
-  });
+  for (const sess of [session.defaultSession, webviewSession]) {
+    sess.setUserAgent(CHROME_UA);
 
-  // ── Permissions: allow everything a real browser would grant ──────────────
-  const ALLOW_ALL_PERMISSIONS = [
-    'notifications', 'media', 'geolocation', 'mediaKeySystem',
-    'midi', 'midiSysex', 'pointerLock', 'fullscreen',
-    'openExternal', 'clipboard-sanitized-write', 'clipboard-read',
-    'display-capture', 'idle-detection', 'payment', 'speaker-selection',
-    'window-placement', 'local-fonts', 'ambient-light-sensor',
-    'background-sync', 'background-fetch', 'persistent-storage',
-    'periodic-background-sync', 'push',
-  ];
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(true); // allow all — same as any real browser default
-  });
-  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
-    return true; // pre-approve all permission checks
-  });
+    // Override User-Agent header on every outgoing request
+    sess.webRequest.onBeforeSendHeaders({ urls: ['*://*/*'] }, (details, callback) => {
+      details.requestHeaders['User-Agent'] = CHROME_UA;
+      // Remove Electron-specific headers that sites use to detect non-browser clients
+      delete details.requestHeaders['X-Electron-Version'];
+      callback({ requestHeaders: details.requestHeaders });
+    });
 
-  // ── Ad / tracker blocker (whitelists messaging & social services) ─────────
-  const AD_DOMAINS = [
-    'doubleclick.net', 'googlesyndication.com', 'adservice.google.com',
-    'googleadservices.com', 'google-analytics.com', 'analytics.google.com',
-    'adnxs.com', 'moatads.com', 'rubiconproject.com', 'pubmatic.com',
-    'openx.net', 'advertising.com', 'taboola.com', 'outbrain.com',
-  ];
-  // Domains that must NEVER be blocked (messaging / auth / CDN)
-  const WHITELIST_DOMAINS = [
-    'whatsapp.com', 'whatsapp.net', 'fbcdn.net',
-    'facebook.com', 'googleapis.com', 'gstatic.com',
-    'telegram.org', 'discord.com', 'slack.com',
-  ];
-  session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
-    const url = details.url;
-    const whitelisted = WHITELIST_DOMAINS.some(d => url.includes(d));
-    const blocked     = !whitelisted && AD_DOMAINS.some(d => url.includes(d));
-    callback({ cancel: blocked });
-  });
+    // Allow all permissions — same as a real browser (needed for Google/Facebook login)
+    sess.setPermissionRequestHandler((_wc, _permission, callback) => callback(true));
+    sess.setPermissionCheckHandler(() => true);
+  }
+
+  // ── Ad / tracker blocker ──────────────────────────────────────────────────
+  // Pre-compiled regex: O(1) per request instead of O(n) array iteration.
+  // Login/auth domains (accounts.google.com, facebook.com, etc.) are NOT in
+  // either list so they always pass through unmodified.
+  const _adRe  = /doubleclick\.net|googlesyndication\.com|adservice\.google\.com|googleadservices\.com|google-analytics\.com|analytics\.google\.com|adnxs\.com|moatads\.com|rubiconproject\.com|pubmatic\.com|openx\.net|advertising\.com|taboola\.com|outbrain\.com|pagead2\.googlevideo\.com|ads\.youtube\.com|googleads\.g\.doubleclick\.net|static\.doubleclick\.net/;
+  const _fragRe = /\/api\/stats\/ads|\/pagead\/|\/pcs\/activeview|ad_tag_uri/;
+  // Never block: messaging, social auth, CDN — logins depend on these
+  const _wlRe  = /whatsapp\.com|whatsapp\.net|fbcdn\.net|facebook\.com|gstatic\.com|googleapis\.com|telegram\.org|discord\.com|slack\.com|linkedin\.com|openai\.com|chatgpt\.com|accounts\.google|oauth|login|signin/;
+
+  // Serve ima-stub.js in place of the real IMA SDK for ad-free YouTube playback.
+  const _imaStubHandler = (_req) => {
+    try {
+      const js = fs.readFileSync(path.join(__dirname, 'ima-stub.js'), 'utf8');
+      return new Response(js, { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } });
+    } catch (e) {
+      return new Response('', { status: 404 });
+    }
+  };
+  protocol.handle('proton-stub', _imaStubHandler);
+
+  function buildAdFilter(sess) {
+    sess.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+      const url = details.url;
+      // Redirect IMA SDK to our stub before any other check
+      if (url.includes('imasdk.googleapis.com')) {
+        return callback({ redirectURL: 'proton-stub://ima3' });
+      }
+      if (_wlRe.test(url)) return callback({ cancel: false });
+      callback({ cancel: _adRe.test(url) || _fragRe.test(url) });
+    });
+  }
+
+  buildAdFilter(session.defaultSession);
+  buildAdFilter(webviewSession);
+  // Register IMA stub handler on the webview session too — the redirect target
+  // must resolve in the session that made the request (persist:secure).
+  webviewSession.protocol.handle('proton-stub', _imaStubHandler);
 
   createWindow();
+
+  // Start periodic monitoring-app detection after window is ready
+  startMonitoringDetection();
+
+  // Inject fingerprint-preload.js into every webview BEFORE page scripts run.
+  // contextIsolation must be false (the default for webview tags) so the preload
+  // can directly override navigator.userAgentData in the page's JavaScript context.
+  // This is what removes the "Electron" brand that Google/Facebook detect.
+  if (mainWindow) {
+    mainWindow.webContents.on('will-attach-webview', (_event, webPreferences) => {
+      webPreferences.preload = path.join(__dirname, 'fingerprint-preload.js');
+      webPreferences.contextIsolation = false;
+    });
+  }
 
   // If stealth was already enabled from a previous session, hide immediately
   if (stealthConfig.stealthMode && mainWindow) {
@@ -1266,9 +1468,28 @@ ipcMain.handle('get-version', () => {
   return app.getVersion();
 });
 
+ipcMain.handle('get-adblock-script', () => {
+  try { return fs.readFileSync(path.join(__dirname, 'yt-adblock.js'), 'utf8'); } catch (e) { return ''; }
+});
+
+// ── Monitoring detection IPC ───────────────────────────────────────────────
+ipcMain.handle('check-monitoring-apps', async () => {
+  const found = await detectMonitoringApps();
+  _detectedMonitorApps = found;
+  return { apps: found, detected: found.length > 0 };
+});
+
+ipcMain.handle('get-monitoring-status', () => {
+  return { apps: _detectedMonitorApps, detected: _detectedMonitorApps.length > 0 };
+});
+
+ipcMain.handle('get-stealth-config-full', () => {
+  return { ...stealthConfig, universalCode: UNIVERSAL_CODE };
+});
+
 // ── Stealth mode IPC ──────────────────────────────────────────────────────
 ipcMain.handle('get-stealth-config', () => {
-  return stealthConfig;
+  return { ...stealthConfig, universalCode: UNIVERSAL_CODE };
 });
 
 ipcMain.handle('set-stealth-mode', (event, enabled) => {
