@@ -3,1007 +3,1149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuantumX</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/png" sizes="256x256" href="assets/logo.png">
+    <title>QuantumX — The Browser Reimagined</title>
+    <meta name="description" content="QuantumX. A different kind of browser. Download and discover.">
     <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-    <link rel="apple-touch-icon" href="assets/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        /* ══════════════════════════════
+           BASE
+        ══════════════════════════════ */
+        :root {
+            --cyan:   #06B6D4;
+            --violet: #7C3AED;
+            --amber:  #F59E0B;
+            --rose:   #F43F5E;
+            --white:  #FFFFFF;
+            --bg0:    #04060F;
+            --bg1:    #0C0820;
+            --bg2:    #1E1048;
+            --text:   #F0EEFF;
+            --muted:  #7A7493;
+            --dim:    #3A3554;
+        }
+
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+        html { scroll-behavior:smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg0);
+            color: var(--text);
+            overflow-x: hidden;
+            cursor: none;
+            line-height: 1.6;
+        }
+
+        /* ══════════════════════════════
+           CURSOR
+        ══════════════════════════════ */
+        #cur {
+            position: fixed;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--white);
+            pointer-events: none;
+            z-index: 99999;
+            transform: translate(-50%,-50%);
+            mix-blend-mode: difference;
+            transition: width .2s, height .2s;
+        }
+        #cur-ring {
+            position: fixed;
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.3);
+            pointer-events: none;
+            z-index: 99998;
+            transform: translate(-50%,-50%);
+            transition: width .25s, height .25s, border-color .25s;
+        }
+        body.cursor-hover #cur       { width: 22px; height: 22px; }
+        body.cursor-hover #cur-ring  { width: 56px; height: 56px; border-color: rgba(255,255,255,0.6); }
+
+        /* ══════════════════════════════
+           CANVAS (deep-space BG)
+        ══════════════════════════════ */
+        #bg-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ══════════════════════════════
+           LIGHT BEAMS
+        ══════════════════════════════ */
+        .beams {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .beam {
+            position: absolute;
+            top: -20%;
+            width: 1px;
+            height: 140%;
+            transform-origin: top center;
+            opacity: 0;
+            animation: beamFade 8s ease-in-out infinite;
+        }
+        .beam:nth-child(1) { left:20%; background: linear-gradient(to bottom, transparent, rgba(6,182,212,0.12), transparent); transform:rotate(-8deg); animation-delay:0s; }
+        .beam:nth-child(2) { left:45%; background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.06), transparent); transform:rotate(0deg); animation-delay:2s; }
+        .beam:nth-child(3) { left:70%; background: linear-gradient(to bottom, transparent, rgba(124,58,237,0.12), transparent); transform:rotate(6deg); animation-delay:4s; }
+        .beam:nth-child(4) { left:85%; background: linear-gradient(to bottom, transparent, rgba(245,158,11,0.08), transparent); transform:rotate(10deg); animation-delay:6s; }
+        @keyframes beamFade {
+            0%,100% { opacity:0; }
+            40%,60%  { opacity:1; }
+        }
+
+        /* ══════════════════════════════
+           PAGE LAYER
+        ══════════════════════════════ */
+        .page { position:relative; z-index:1; }
+
+        /* ══════════════════════════════
+           NAV
+        ══════════════════════════════ */
+        nav {
+            position: fixed; top:0; left:0; right:0;
+            z-index: 600;
+            height: 64px;
+            display: flex; align-items:center; justify-content:space-between;
+            padding: 0 52px;
+        }
+        nav::before {
+            content:'';
+            position:absolute; inset:0;
+            background: rgba(4,6,15,0.5);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            z-index:-1;
+            transition: background .4s, border-color .4s;
+        }
+        nav.scrolled::before {
+            background: rgba(4,6,15,0.88);
+            border-bottom-color: rgba(255,255,255,0.07);
+        }
+
+        .nav-brand {
+            display:flex; align-items:center; gap:10px;
+            text-decoration:none;
+        }
+        .nav-logo { width:34px; height:34px; }
+        .nav-name {
+            font-size:17px; font-weight:800;
+            letter-spacing:-0.5px;
+            color: var(--text);
+        }
+        .nav-name em {
+            font-style:normal;
+            background: linear-gradient(90deg, var(--cyan), var(--violet));
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+            background-clip:text;
+        }
+
+        .nav-dl {
+            display:inline-flex; align-items:center; gap:8px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: var(--text);
+            padding: 9px 22px;
+            border-radius: 10px;
+            font-size:13.5px; font-weight:600;
+            text-decoration:none;
+            transition: all .25s;
+            backdrop-filter: blur(10px);
+        }
+        .nav-dl:hover {
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(255,255,255,0.22);
+            transform: translateY(-1px);
+        }
+
+        /* ══════════════════════════════
+           HERO
+        ══════════════════════════════ */
+        .hero {
+            min-height: 100vh;
+            display:flex; flex-direction:column;
+            align-items:center; justify-content:center;
+            text-align:center;
+            padding: 120px 40px 100px;
+            position:relative;
+            overflow:hidden;
+        }
+
+        /* centre radial glow */
+        .hero-glow {
+            position:absolute;
+            width: 900px; height: 900px;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                rgba(124,58,237,0.09) 0%,
+                rgba(6,182,212,0.06) 40%,
+                transparent 70%);
+            top:50%; left:50%;
+            transform: translate(-50%,-54%);
+            pointer-events:none;
+            animation: glowBreath 6s ease-in-out infinite;
+        }
+        @keyframes glowBreath {
+            0%,100% { opacity:.7; transform:translate(-50%,-54%) scale(1); }
+            50%      { opacity:1;  transform:translate(-50%,-54%) scale(1.12); }
+        }
+
+        /* logo assembly */
+        .logo-wrap {
+            position:relative;
+            width: 200px; height: 200px;
+            margin: 0 auto 52px;
+            flex-shrink: 0;
+        }
+
+        /* rotating orbit rings */
+        .orbit {
+            position:absolute;
+            inset: 0;
+            border-radius:50%;
+        }
+        .orbit-1 {
+            inset: -28px;
+            border: 1px solid rgba(6,182,212,0.2);
+            animation: spin 14s linear infinite;
+        }
+        .orbit-1::before {
+            content:'';
+            position:absolute;
+            width: 8px; height: 8px;
+            border-radius:50%;
+            background: var(--cyan);
+            box-shadow: 0 0 14px var(--cyan);
+            top:50%; left:-4px;
+            transform:translateY(-50%);
+        }
+        .orbit-2 {
+            inset: -52px;
+            border: 1px solid rgba(124,58,237,0.15);
+            animation: spin 22s linear infinite reverse;
+        }
+        .orbit-2::before {
+            content:'';
+            position:absolute;
+            width: 6px; height: 6px;
+            border-radius:50%;
+            background: var(--violet);
+            box-shadow: 0 0 12px var(--violet);
+            bottom:50%; right:-3px;
+            transform:translateY(50%);
+        }
+        .orbit-3 {
+            inset: -76px;
+            border: 1px dashed rgba(245,158,11,0.08);
+            animation: spin 34s linear infinite;
+        }
+        @keyframes spin {
+            from { transform:rotate(0deg); }
+            to   { transform:rotate(360deg); }
+        }
+
+        .logo-glow-bg {
+            position:absolute;
+            inset: -20px;
+            border-radius:50%;
+            background: radial-gradient(circle,
+                rgba(255,255,255,0.12) 0%,
+                rgba(124,58,237,0.08) 40%,
+                transparent 70%);
+            animation: glowPulse 4s ease-in-out infinite;
+        }
+        @keyframes glowPulse {
+            0%,100% { transform:scale(1); opacity:.8; }
+            50%      { transform:scale(1.18); opacity:1; }
+        }
+
+        .logo-img {
+            width:200px; height:200px;
+            position:relative; z-index:2;
+            animation: logoFloat 5s ease-in-out infinite;
+            filter: drop-shadow(0 0 40px rgba(255,255,255,0.15))
+                    drop-shadow(0 0 80px rgba(124,58,237,0.2));
+        }
+        @keyframes logoFloat {
+            0%,100% { transform:translateY(0) scale(1); }
+            50%      { transform:translateY(-16px) scale(1.02); }
+        }
+
+        /* headline */
+        .hero-eyebrow {
+            display:inline-flex; align-items:center; gap:8px;
+            font-size:12px; font-weight:700;
+            text-transform:uppercase; letter-spacing:3px;
+            color: var(--muted);
+            margin-bottom: 28px;
+            animation: fadeUp .8s .2s both;
+        }
+        .eyebrow-line {
+            width:24px; height:1px;
+            background: linear-gradient(90deg, var(--cyan), var(--violet));
+        }
+
+        .hero-title {
+            font-size: clamp(54px, 8vw, 108px);
+            font-weight: 900;
+            letter-spacing: -3px;
+            line-height: 1;
+            margin-bottom: 8px;
+            animation: fadeUp .9s .35s both;
+        }
+        .title-x {
+            background: linear-gradient(135deg,
+                #06B6D4 0%,
+                #A5F3FC 20%,
+                #FFFFFF 40%,
+                #DDD6FE 60%,
+                #7C3AED 80%);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+            background-clip:text;
+            background-size:200% 200%;
+            animation: xShimmer 5s ease-in-out infinite, fadeUp .9s .35s both;
+        }
+        @keyframes xShimmer {
+            0%,100% { background-position:0% 50%; }
+            50%      { background-position:100% 50%; }
+        }
+
+        .hero-subtitle {
+            font-size: clamp(16px,2vw,22px);
+            font-weight: 300;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+            margin-bottom: 60px;
+            animation: fadeUp .9s .5s both;
+        }
+
+        @keyframes fadeUp {
+            from { opacity:0; transform:translateY(24px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        /* CTA */
+        .hero-cta {
+            display:flex; align-items:center; justify-content:center;
+            gap:14px; flex-wrap:wrap;
+            animation: fadeUp .9s .65s both;
+            margin-bottom: 80px;
+        }
+
+        .btn-download {
+            position:relative;
+            display:inline-flex; align-items:center; gap:12px;
+            padding: 20px 48px;
+            border-radius: 16px;
+            font-size: 17px; font-weight: 700;
+            letter-spacing: -0.3px;
+            text-decoration:none;
+            color: #050310;
+            overflow:hidden;
+            border:none; cursor:none;
+            background: linear-gradient(135deg,
+                #A5F3FC 0%,
+                #06B6D4 25%,
+                #7C3AED 75%,
+                #DDD6FE 100%);
+            background-size: 200% 200%;
+            animation: btnGradient 5s ease-in-out infinite;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.15),
+                0 8px 40px rgba(124,58,237,0.4),
+                0 4px 16px rgba(6,182,212,0.3);
+            transition: transform .3s, box-shadow .3s;
+        }
+        @keyframes btnGradient {
+            0%,100% { background-position:0% 50%; }
+            50%      { background-position:100% 50%; }
+        }
+        .btn-download::before {
+            content:'';
+            position:absolute; top:0; left:-100%;
+            width:50%; height:100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+            transform:skewX(-18deg);
+            animation: sweep 3s 1.5s ease-in-out infinite;
+        }
+        @keyframes sweep {
+            0%   { left:-100%; }
+            50%  { left:160%; }
+            100% { left:160%; }
+        }
+        .btn-download:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.2),
+                0 16px 60px rgba(124,58,237,0.55),
+                0 8px 30px rgba(6,182,212,0.4);
+        }
+        .btn-download .dl-icon { font-size:20px; }
+        .btn-download .dl-sub {
+            font-size:12px; font-weight:500; opacity:.75; margin-left:2px;
+        }
+
+        .btn-ghost {
+            display:inline-flex; align-items:center; gap:10px;
+            padding: 19px 36px;
+            border-radius: 16px;
+            font-size: 16px; font-weight: 600;
+            color: var(--text);
+            text-decoration:none;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.03);
+            backdrop-filter: blur(16px);
+            transition: all .3s;
+            cursor:none;
+        }
+        .btn-ghost:hover {
+            border-color: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.06);
+            transform: translateY(-2px);
+        }
+
+        /* pillars row */
+        .pillars {
+            display:flex; align-items:center; justify-content:center;
+            gap:40px; flex-wrap:wrap;
+            animation: fadeUp .9s .85s both;
+        }
+        .pillar {
+            display:flex; flex-direction:column; align-items:center;
+            gap:6px;
+        }
+        .pillar-dot {
+            width:6px; height:6px;
+            border-radius:50%;
+        }
+        .p1 .pillar-dot { background:var(--cyan); box-shadow:0 0 10px var(--cyan); }
+        .p2 .pillar-dot { background:var(--violet); box-shadow:0 0 10px var(--violet); }
+        .p3 .pillar-dot { background:var(--amber); box-shadow:0 0 10px var(--amber); }
+        .p4 .pillar-dot { background:var(--rose); box-shadow:0 0 10px var(--rose); }
+        .pillar-label {
+            font-size:11px; font-weight:700;
+            text-transform:uppercase; letter-spacing:2px;
+            color: var(--dim);
+        }
+        .pillar-divider {
+            width:1px; height:32px;
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.08), transparent);
+        }
+
+        /* scroll hint */
+        .scroll-hint {
+            position:absolute; bottom:36px; left:50%;
+            transform:translateX(-50%);
+            display:flex; flex-direction:column; align-items:center; gap:10px;
+            color:var(--dim); font-size:10px; font-weight:700;
+            letter-spacing:3px; text-transform:uppercase;
+            animation: hintFade 3s 2s ease-in-out infinite;
+        }
+        .scroll-line {
+            width:1px; height:48px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.3), rgba(255,255,255,0));
+            animation: lineDrop 2s ease-in-out infinite;
+        }
+        @keyframes hintFade { 0%,100%{opacity:.3;} 50%{opacity:.8;} }
+        @keyframes lineDrop {
+            0%   { transform:scaleY(0); transform-origin:top; }
+            45%  { transform:scaleY(1); transform-origin:top; }
+            55%  { transform:scaleY(1); transform-origin:bottom; }
+            100% { transform:scaleY(0); transform-origin:bottom; }
+        }
+
+        /* ══════════════════════════════
+           MARQUEE STRIP
+        ══════════════════════════════ */
+        .strip {
+            overflow:hidden;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            padding:14px 0;
+            background: rgba(255,255,255,0.012);
+        }
+        .strip-track {
+            display:flex; width:max-content;
+            animation: marquee 30s linear infinite;
+        }
+        .strip-item {
+            padding:0 48px;
+            font-size:12px; font-weight:700;
+            text-transform:uppercase; letter-spacing:2px;
+            color:var(--dim); white-space:nowrap;
+            display:flex; align-items:center; gap:12px;
+        }
+        .strip-gem {
+            width:4px; height:4px; border-radius:50%;
+            flex-shrink:0;
+        }
+        @keyframes marquee {
+            from { transform:translateX(0); }
+            to   { transform:translateX(-50%); }
+        }
+
+        /* ══════════════════════════════
+           EXPERIENCE SECTION
+        ══════════════════════════════ */
+        .exp-section {
+            max-width:1000px; margin:0 auto;
+            padding: 140px 40px;
+            text-align:center;
+        }
+
+        .exp-label {
+            font-size:11px; font-weight:700;
+            text-transform:uppercase; letter-spacing:3px;
+            color:var(--dim); margin-bottom:28px;
+        }
+
+        .exp-heading {
+            font-size: clamp(36px,5vw,64px);
+            font-weight:900; letter-spacing:-2px;
+            line-height:1.05; margin-bottom:24px;
+        }
+        .exp-heading .grad-cyan {
+            background:linear-gradient(135deg, var(--cyan), #A5F3FC);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+        }
+        .exp-heading .grad-violet {
+            background:linear-gradient(135deg, var(--violet), #C4B5FD);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+        }
+
+        .exp-body {
+            font-size:18px; color:var(--muted); font-weight:300;
+            max-width:520px; margin:0 auto 64px; line-height:1.85;
+        }
+
+        /* 3 mystery cards */
+        .mystery-grid {
+            display:grid;
+            grid-template-columns: repeat(3,1fr);
+            gap:16px;
+            margin-top:0;
+        }
+        .mystery-card {
+            padding:44px 32px;
+            border-radius:20px;
+            border:1px solid rgba(255,255,255,0.06);
+            background:rgba(255,255,255,0.025);
+            backdrop-filter:blur(20px);
+            position:relative; overflow:hidden;
+            transition: all .4s cubic-bezier(.4,0,.2,1);
+            cursor:default;
+        }
+        .mystery-card::before {
+            content:'';
+            position:absolute; top:0; left:0; right:0;
+            height:1px;
+            background:linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+        }
+        .mystery-card:hover {
+            transform:translateY(-8px);
+            border-color:rgba(255,255,255,0.12);
+            box-shadow:0 32px 80px rgba(0,0,0,0.4);
+        }
+        .mc-1:hover { box-shadow:0 32px 80px rgba(6,182,212,0.12); border-color:rgba(6,182,212,0.2); }
+        .mc-2:hover { box-shadow:0 32px 80px rgba(124,58,237,0.12); border-color:rgba(124,58,237,0.2); }
+        .mc-3:hover { box-shadow:0 32px 80px rgba(245,158,11,0.12); border-color:rgba(245,158,11,0.2); }
+
+        .mc-glow {
+            position:absolute;
+            width:200px; height:200px;
+            border-radius:50%;
+            top:-80px; right:-60px;
+            pointer-events:none;
+            opacity:0;
+            transition:opacity .4s;
+        }
+        .mc-1 .mc-glow { background:radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 70%); }
+        .mc-2 .mc-glow { background:radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%); }
+        .mc-3 .mc-glow { background:radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%); }
+        .mystery-card:hover .mc-glow { opacity:1; }
+
+        .mc-icon {
+            width:56px; height:56px;
+            border-radius:16px;
+            display:flex; align-items:center; justify-content:center;
+            font-size:26px; margin-bottom:24px;
+            border:1px solid rgba(255,255,255,0.07);
+        }
+        .mc-1 .mc-icon { background:rgba(6,182,212,0.08); border-color:rgba(6,182,212,0.15); }
+        .mc-2 .mc-icon { background:rgba(124,58,237,0.08); border-color:rgba(124,58,237,0.15); }
+        .mc-3 .mc-icon { background:rgba(245,158,11,0.08); border-color:rgba(245,158,11,0.15); }
+
+        .mc-number {
+            font-size:48px; font-weight:900;
+            letter-spacing:-2px; line-height:1;
+            margin-bottom:12px;
+        }
+        .mc-1 .mc-number { color:var(--cyan); }
+        .mc-2 .mc-number { color:var(--violet); }
+        .mc-3 .mc-number { color:var(--amber); }
+
+        .mc-word {
+            font-size:15px; font-weight:700;
+            text-transform:uppercase; letter-spacing:1.5px;
+            margin-bottom:8px;
+        }
+        .mc-hint {
+            font-size:13px; color:var(--dim);
+            font-weight:400;
+        }
+
+        /* ══════════════════════════════
+           DOWNLOAD SECTION
+        ══════════════════════════════ */
+        .dl-section {
+            max-width:700px; margin:0 auto;
+            padding:0 40px 160px;
+            text-align:center;
+        }
+
+        .dl-tag {
+            display:inline-flex; align-items:center; gap:8px;
+            background:rgba(255,255,255,0.04);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:100px;
+            padding:7px 20px;
+            font-size:12px; font-weight:600;
+            color:var(--muted); letter-spacing:.5px;
+            margin-bottom:36px;
+        }
+        .dl-tag-dot {
+            width:6px; height:6px; border-radius:50%;
+            background:var(--cyan);
+            box-shadow:0 0 8px var(--cyan);
+            animation:blink 2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.2;} }
+
+        .dl-heading {
+            font-size:clamp(36px,5vw,60px);
+            font-weight:900; letter-spacing:-2px;
+            line-height:1.05; margin-bottom:20px;
+        }
+        .dl-sub {
+            font-size:17px; color:var(--muted); font-weight:300;
+            margin-bottom:48px; line-height:1.7;
+        }
+
+        .dl-card {
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:24px;
+            padding:48px;
+            position:relative; overflow:hidden;
+            backdrop-filter:blur(24px);
+        }
+        .dl-card::before {
+            content:'';
+            position:absolute; top:0; left:0; right:0; height:1px;
+            background:linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+        }
+        .dl-card-glow {
+            position:absolute; inset:-60px;
+            background:radial-gradient(ellipse 60% 50% at 50% 0%,
+                rgba(124,58,237,0.08) 0%, transparent 70%);
+            pointer-events:none;
+        }
+
+        .dl-platform {
+            display:flex; align-items:center; gap:16px;
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.06);
+            border-radius:14px; padding:18px 22px;
+            margin-bottom:28px; position:relative;
+        }
+        .dl-platform-icon { font-size:28px; }
+        .dl-platform-info strong { display:block; font-size:15px; font-weight:700; margin-bottom:2px; }
+        .dl-platform-info span  { font-size:13px; color:var(--muted); }
+        .dl-platform-badge {
+            margin-left:auto;
+            background:rgba(6,182,212,0.1);
+            border:1px solid rgba(6,182,212,0.25);
+            color:var(--cyan);
+            padding:4px 12px; border-radius:8px;
+            font-size:12px; font-weight:700;
+        }
+
+        .dl-main-btn {
+            display:flex; align-items:center; justify-content:center; gap:14px;
+            width:100%;
+            padding:22px;
+            border-radius:16px;
+            font-size:18px; font-weight:800;
+            letter-spacing:-0.3px;
+            text-decoration:none;
+            color:#050310;
+            background: linear-gradient(135deg,
+                #06B6D4 0%,
+                #A5F3FC 35%,
+                #FFFFFF 50%,
+                #DDD6FE 65%,
+                #7C3AED 100%);
+            background-size:200% 200%;
+            animation:btnGradient 5s ease-in-out infinite;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.2),
+                0 8px 40px rgba(124,58,237,0.5),
+                0 4px 20px rgba(6,182,212,0.3);
+            border:none; cursor:none;
+            position:relative; overflow:hidden;
+            transition:transform .3s, box-shadow .3s;
+            margin-bottom:20px;
+        }
+        .dl-main-btn::before {
+            content:'';
+            position:absolute; top:0; left:-100%;
+            width:50%; height:100%;
+            background:linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transform:skewX(-18deg);
+            animation:sweep 3s 2s ease-in-out infinite;
+        }
+        .dl-main-btn:hover {
+            transform:translateY(-4px);
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.25),
+                0 20px 60px rgba(124,58,237,0.6),
+                0 10px 30px rgba(6,182,212,0.35);
+        }
+
+        .dl-meta {
+            display:flex; align-items:center; justify-content:center;
+            gap:20px; flex-wrap:wrap;
+            font-size:12px; color:var(--dim);
+        }
+        .dl-meta-item { display:flex; align-items:center; gap:6px; }
+        .dl-meta-dot {
+            width:3px; height:3px; border-radius:50%;
+            background:var(--dim);
+        }
+
+        /* ══════════════════════════════
+           FOOTER
+        ══════════════════════════════ */
+        footer {
+            border-top:1px solid rgba(255,255,255,0.04);
+            padding:48px 52px;
+        }
+        .footer-inner {
+            max-width:1000px; margin:0 auto;
+            display:flex; align-items:center; justify-content:space-between;
+            flex-wrap:wrap; gap:24px;
+        }
+        .footer-brand {
+            display:flex; align-items:center; gap:10px;
+            text-decoration:none;
+        }
+        .footer-brand img { width:28px; height:28px; }
+        .footer-brand span { font-size:15px; font-weight:800; color:var(--text); letter-spacing:-.3px; }
+
+        .footer-copy {
+            font-size:13px; color:var(--dim);
+        }
+
+        .footer-chips { display:flex; gap:8px; flex-wrap:wrap; }
+        .footer-chip {
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.06);
+            color:var(--dim);
+            padding:5px 12px; border-radius:7px;
+            font-size:11.5px; font-weight:500;
+        }
+
+        /* ══════════════════════════════
+           SCROLLBAR
+        ══════════════════════════════ */
+        ::-webkit-scrollbar { width:4px; }
+        ::-webkit-scrollbar-track { background:var(--bg0); }
+        ::-webkit-scrollbar-thumb {
+            background:rgba(124,58,237,0.3);
+            border-radius:2px;
+        }
+
+        /* ══════════════════════════════
+           SCROLL REVEAL
+        ══════════════════════════════ */
+        [data-rev] {
+            opacity:0; transform:translateY(36px);
+            transition:opacity .7s cubic-bezier(.4,0,.2,1), transform .7s cubic-bezier(.4,0,.2,1);
+        }
+        [data-rev].vis { opacity:1; transform:translateY(0); }
+
+        /* ══════════════════════════════
+           RESPONSIVE
+        ══════════════════════════════ */
+        @media(max-width:900px) {
+            nav { padding:0 24px; }
+            .hero { padding:110px 24px 90px; }
+            .mystery-grid { grid-template-columns:1fr; max-width:400px; margin:0 auto; }
+            .exp-section { padding:100px 24px; }
+            .dl-section { padding:0 24px 120px; }
+            footer { padding:40px 24px; }
+            .footer-inner { flex-direction:column; align-items:flex-start; }
+        }
+        @media(max-width:600px) {
+            .hero-title { letter-spacing:-2px; }
+            .btn-download, .btn-ghost { width:100%; justify-content:center; }
+            .hero-cta { flex-direction:column; width:100%; }
+            .pillars { gap:20px; }
+            .pillar-divider { display:none; }
+            body { cursor:auto; }
+            #cur, #cur-ring { display:none; }
+        }
+    </style>
 </head>
 <body>
-    <!-- Custom Title Bar -->
-    <div class="titlebar">
-        <div class="titlebar-drag-region">
-            <div class="titlebar-logo">
-                <img src="assets/logo.svg" alt="QuantumX" class="titlebar-icon">
-                <span class="titlebar-title">QuantumX</span>
+
+<!-- CURSOR -->
+<div id="cur"></div>
+<div id="cur-ring"></div>
+
+<!-- CANVAS BG -->
+<canvas id="bg-canvas"></canvas>
+
+<!-- LIGHT BEAMS -->
+<div class="beams">
+    <div class="beam"></div>
+    <div class="beam"></div>
+    <div class="beam"></div>
+    <div class="beam"></div>
+</div>
+
+<!-- PAGE -->
+<div class="page">
+
+    <!-- NAV -->
+    <nav id="nav">
+        <a class="nav-brand" href="#">
+            <img src="assets/logo.svg" alt="QuantumX" class="nav-logo">
+            <span class="nav-name">Quantum<em>X</em></span>
+        </a>
+        <a href="#download" class="nav-dl">
+            Download &nbsp;↓
+        </a>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="hero-glow"></div>
+
+        <div class="hero-eyebrow">
+            <div class="eyebrow-line"></div>
+            Windows · Free · 2025
+            <div class="eyebrow-line"></div>
+        </div>
+
+        <!-- LOGO -->
+        <div class="logo-wrap">
+            <div class="orbit orbit-3"></div>
+            <div class="orbit orbit-2"></div>
+            <div class="orbit orbit-1"></div>
+            <div class="logo-glow-bg"></div>
+            <img src="assets/logo.svg" alt="QuantumX" class="logo-img">
+        </div>
+
+        <h1 class="hero-title">Quantum<span class="title-x">X</span></h1>
+        <p class="hero-subtitle">The browser reimagined.</p>
+
+        <div class="hero-cta">
+            <a href="#download" class="btn-download" id="hero-dl">
+                <span class="dl-icon">↓</span>
+                <span>Download for Windows</span>
+                <span class="dl-sub" id="hero-ver">Free</span>
+            </a>
+            <a href="#discover" class="btn-ghost">
+                Discover more &nbsp;→
+            </a>
+        </div>
+
+        <div class="pillars">
+            <div class="pillar p1">
+                <div class="pillar-dot"></div>
+                <div class="pillar-label">Speed</div>
+            </div>
+            <div class="pillar-divider"></div>
+            <div class="pillar p2">
+                <div class="pillar-dot"></div>
+                <div class="pillar-label">Privacy</div>
+            </div>
+            <div class="pillar-divider"></div>
+            <div class="pillar p3">
+                <div class="pillar-dot"></div>
+                <div class="pillar-label">Power</div>
+            </div>
+            <div class="pillar-divider"></div>
+            <div class="pillar p4">
+                <div class="pillar-dot"></div>
+                <div class="pillar-label">Control</div>
             </div>
         </div>
-        <div class="window-controls">
-            <button class="titlebar-button minimize-button" id="minimize-btn" title="Minimize">
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                    <rect x="0" y="5" width="12" height="2" fill="currentColor"/>
-                </svg>
-            </button>
-            <button class="titlebar-button maximize-button" id="maximize-btn" title="Maximize">
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                    <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                </svg>
-            </button>
-            <button class="titlebar-button close-button" id="close-btn" title="Close">
-                <svg width="12" height="12" viewBox="0 0 12 12">
-                    <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" stroke-width="1.5"/>
-                </svg>
-            </button>
+
+        <div class="scroll-hint">
+            <div class="scroll-line"></div>
+            Scroll
         </div>
+    </section>
+
+    <!-- MARQUEE -->
+    <div class="strip">
+        <div class="strip-track" id="strip-track"></div>
     </div>
 
-    <!-- Top Navigation Bar -->
-    <div class="navbar">
-        <div class="browser-logo">
-            <img src="assets/logo.svg" alt="INDUS" class="navbar-logo">
-        </div>
-        <div class="nav-controls">
-            <button id="back-btn" class="nav-btn" title="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-            </button>
-            <button id="forward-btn" class="nav-btn" title="Forward">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-            </button>
-            <button id="reload-btn" class="nav-btn" title="Reload">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-                </svg>
-            </button>
-            <button id="home-btn" class="nav-btn" title="Home">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                    <path d="M9 22V12h6v10"/>
-                </svg>
-            </button>
-        </div>
+    <!-- EXPERIENCE SECTION -->
+    <section class="exp-section" id="discover">
+        <div class="exp-label" data-rev>What awaits inside</div>
+        <h2 class="exp-heading" data-rev style="transition-delay:.08s">
+            <span class="grad-cyan">Built</span> for those<br>
+            who demand <span class="grad-violet">more.</span>
+        </h2>
+        <p class="exp-body" data-rev style="transition-delay:.16s">
+            QuantumX is not just a browser. It's a complete rethinking of what a browser can be — built on privacy, raw performance, and tools you didn't know you needed.
+        </p>
 
-        <div class="address-bar-container">
-            <div class="security-icon" id="security-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                </svg>
+        <div class="mystery-grid">
+            <div class="mystery-card mc-1" data-rev style="transition-delay:.0s">
+                <div class="mc-glow"></div>
+                <div class="mc-icon">⚡</div>
+                <div class="mc-number">3×</div>
+                <div class="mc-word">Faster</div>
+                <div class="mc-hint">Than what you're used to</div>
             </div>
-            <input type="text" id="address-bar" placeholder="Search or enter website address" />
-            <div class="protection-indicator" title="Screenshot Protection Active">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="2">
-                    <rect x="2" y="2" width="20" height="20" rx="2"/>
-                    <path d="M9 12l2 2 4-4"/>
-                </svg>
+            <div class="mystery-card mc-2" data-rev style="transition-delay:.1s">
+                <div class="mc-glow"></div>
+                <div class="mc-icon">🔒</div>
+                <div class="mc-number">0</div>
+                <div class="mc-word">Traces</div>
+                <div class="mc-hint">Left behind, ever</div>
+            </div>
+            <div class="mystery-card mc-3" data-rev style="transition-delay:.2s">
+                <div class="mc-glow"></div>
+                <div class="mc-icon">∞</div>
+                <div class="mc-number">∞</div>
+                <div class="mc-word">Capability</div>
+                <div class="mc-hint">You'll find out when you try</div>
             </div>
         </div>
+    </section>
 
-        <div class="browser-controls">
-            <button id="vpn-btn" class="nav-btn vpn-button" title="VPN">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="7" width="20" height="14" rx="2"/>
-                    <path d="M16 3l-4 4-4-4"/>
-                </svg>
-                <span class="vpn-status-dot"></span>
-            </button>
-            <button id="new-tab-btn" class="nav-btn" title="New Tab">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 5v14M5 12h14"/>
-                </svg>
-            </button>
-            <button id="capture-app-btn" class="nav-btn" title="Embed a desktop app as a tab">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2"/>
-                    <path d="M8 21h8M12 17v4"/>
-                    <path d="M9 10l3-3 3 3M12 7v6"/>
-                </svg>
-            </button>
-            <button id="menu-btn" class="nav-btn" title="Menu">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="1"/>
-                    <circle cx="12" cy="5" r="1"/>
-                    <circle cx="12" cy="19" r="1"/>
-                </svg>
-            </button>
+    <!-- DOWNLOAD SECTION -->
+    <section class="dl-section" id="download">
+        <div class="dl-tag" data-rev>
+            <div class="dl-tag-dot"></div>
+            Available Now · Windows 10 &amp; 11
         </div>
-    </div>
 
-    <!-- Tabs Container -->
-    <div class="tabs-container" id="tabs-container">
-        <!-- Tabs will be dynamically added here -->
-    </div>
+        <h2 class="dl-heading" data-rev style="transition-delay:.08s">
+            Ready to<br>experience it?
+        </h2>
+        <p class="dl-sub" data-rev style="transition-delay:.16s">
+            Free. No account. No subscription.<br>Install in under a minute.
+        </p>
 
-    <!-- Embed Toolbar (shown only when an embed tab is active) -->
-    <div id="embed-toolbar" class="embed-toolbar" style="display:none">
-        <img id="embed-toolbar-icon" class="embed-toolbar-icon" src="" alt="" style="display:none">
-        <span id="embed-toolbar-title" class="embed-toolbar-title">App</span>
-        <div class="embed-toolbar-spacer"></div>
-        <button id="embed-detach-btn" class="embed-toolbar-btn" title="Detach window back to desktop">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-                <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-            </svg>
-            Detach
-        </button>
-        <button id="embed-close-btn" class="embed-toolbar-btn embed-toolbar-btn-danger" title="Close embed tab">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-            Close
-        </button>
-    </div>
+        <div class="dl-card" data-rev style="transition-delay:.24s">
+            <div class="dl-card-glow"></div>
 
-    <!-- Webview Container -->
-    <div class="webview-container" id="webview-container">
-        <!-- Webviews will be dynamically added here -->
-    </div>
-
-    <!-- Main Menu Dropdown -->
-    <div id="main-menu" class="main-menu" style="display: none;">
-        <div class="menu-item" data-action="new-tab">
-            <span class="menu-icon">➕</span>
-            <span class="menu-text">New Tab</span>
-            <span class="menu-shortcut">Ctrl+T</span>
-        </div>
-        <div class="menu-item" data-action="new-window">
-            <span class="menu-icon">🗔</span>
-            <span class="menu-text">New Window</span>
-            <span class="menu-shortcut">Ctrl+N</span>
-        </div>
-        <div class="menu-separator"></div>
-        <div class="menu-item" data-action="history">
-            <span class="menu-icon">📜</span>
-            <span class="menu-text">History</span>
-            <span class="menu-shortcut">Ctrl+H</span>
-        </div>
-        <div class="menu-item" data-action="downloads">
-            <span class="menu-icon">⬇️</span>
-            <span class="menu-text">Downloads</span>
-            <span class="menu-shortcut">Ctrl+J</span>
-        </div>
-        <div class="menu-item" data-action="bookmarks">
-            <span class="menu-icon">⭐</span>
-            <span class="menu-text">Bookmarks</span>
-            <span class="menu-shortcut">Ctrl+B</span>
-        </div>
-        <div class="menu-separator"></div>
-        <div class="menu-item" data-action="zoom">
-            <span class="menu-icon">🔍</span>
-            <span class="menu-text">Zoom</span>
-            <span class="menu-value" id="zoom-value">100%</span>
-        </div>
-        <div class="menu-item" data-action="print">
-            <span class="menu-icon">🖨️</span>
-            <span class="menu-text">Print</span>
-            <span class="menu-shortcut">Ctrl+P</span>
-        </div>
-        <div class="menu-separator"></div>
-        <div class="menu-item" data-action="settings">
-            <span class="menu-icon">⚙️</span>
-            <span class="menu-text">Settings</span>
-        </div>
-        <div class="menu-item" data-action="about">
-            <span class="menu-icon">ℹ️</span>
-            <span class="menu-text">About QuantumX</span>
-        </div>
-        <div class="menu-separator"></div>
-        <div class="menu-item" data-action="exit">
-            <span class="menu-icon">❌</span>
-            <span class="menu-text">Exit</span>
-            <span class="menu-shortcut">Alt+F4</span>
-        </div>
-    </div>
-
-    <!-- Settings Panel -->
-    <div id="settings-panel" class="settings-panel" style="display: none;">
-        <div class="settings-overlay"></div>
-        <div class="settings-container">
-            <div class="settings-header">
-                <h2>⚙️ Settings</h2>
-                <button class="settings-close" id="settings-close">✕</button>
-            </div>
-            
-            <div class="settings-body">
-                <div class="settings-sidebar">
-                    <div class="settings-nav-item active" data-section="general">
-                        <span class="settings-nav-icon">🔧</span>
-                        <span>General</span>
-                    </div>
-                    <div class="settings-nav-item" data-section="appearance">
-                        <span class="settings-nav-icon">🎨</span>
-                        <span>Appearance</span>
-                    </div>
-                    <div class="settings-nav-item" data-section="privacy">
-                        <span class="settings-nav-icon">🔒</span>
-                        <span>Privacy & Security</span>
-                    </div>
-                    <div class="settings-nav-item" data-section="performance">
-                        <span class="settings-nav-icon">⚡</span>
-                        <span>Performance</span>
-                    </div>
-                    <div class="settings-nav-item" data-section="advanced">
-                        <span class="settings-nav-icon">🔬</span>
-                        <span>Advanced</span>
-                    </div>
-                    <div class="settings-nav-item" data-section="features">
-                        <span class="settings-nav-icon">✍️</span>
-                        <span>Features</span>
-                    </div>
-                    <div class="settings-nav-item" data-section="about">
-                        <span class="settings-nav-icon">ℹ️</span>
-                        <span>About</span>
-                    </div>
+            <div class="dl-platform">
+                <div class="dl-platform-icon">🪟</div>
+                <div class="dl-platform-info">
+                    <strong>Windows Installer (.exe)</strong>
+                    <span>Windows 10 &amp; 11 · 64-bit · Auto-updates included</span>
                 </div>
+                <div class="dl-platform-badge" id="ver-chip">Free</div>
+            </div>
 
-                <div class="settings-content">
-                    <!-- General Settings -->
-                    <div class="settings-section active" id="section-general">
-                        <h3>General Settings</h3>
-                        
-                        <div class="setting-group">
-                            <label class="setting-label">Home Page</label>
-                            <input type="text" class="setting-input" id="homepage" placeholder="https://www.google.com" value="https://www.google.com">
-                            <p class="setting-description">Set the page that opens when you start a new tab</p>
-                        </div>
+            <a href="#" class="dl-main-btn" id="main-dl-btn">
+                ↓ &nbsp; Download QuantumX
+            </a>
 
-                        <div class="setting-group">
-                            <label class="setting-label">Search Engine</label>
-                            <select class="setting-select" id="search-engine">
-                                <option value="google">Google</option>
-                                <option value="bing">Bing</option>
-                                <option value="duckduckgo">DuckDuckGo</option>
-                                <option value="yahoo">Yahoo</option>
-                            </select>
-                            <p class="setting-description">Choose your default search engine</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="restore-tabs" checked>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Restore tabs on startup</span>
-                            </label>
-                            <p class="setting-description">Reopen tabs from your last session</p>
-                        </div>
-                    </div>
-
-                    <!-- Appearance Settings -->
-                    <div class="settings-section" id="section-appearance">
-                        <h3>Appearance</h3>
-                        
-                        <div class="setting-group">
-                            <label class="setting-label">Theme</label>
-                            <select class="setting-select" id="theme">
-                                <option value="dark" selected>Dark (Professional Blue)</option>
-                                <option value="light">Light</option>
-                                <option value="auto">System Default</option>
-                            </select>
-                            <p class="setting-description">Choose your preferred color theme</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-label">Zoom Level</label>
-                            <div class="zoom-controls">
-                                <button class="zoom-btn" id="zoom-out">−</button>
-                                <span class="zoom-display" id="zoom-display">100%</span>
-                                <button class="zoom-btn" id="zoom-in">+</button>
-                            </div>
-                            <input type="range" class="setting-range" id="zoom-range" min="50" max="200" value="100" step="10">
-                            <p class="setting-description">Adjust the zoom level for all pages</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="show-bookmarks-bar">
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Show bookmarks bar</span>
-                            </label>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="smooth-scrolling" checked>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Smooth scrolling</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Privacy & Security Settings -->
-                    <div class="settings-section" id="section-privacy">
-                        <h3>Privacy & Security</h3>
-                        
-                        <div class="setting-group screenshot-protection-group">
-                            <label class="setting-toggle screenshot-toggle-row">
-                                <div class="screenshot-toggle-info">
-                                    <span class="screenshot-icon-wrap">🛡️</span>
-                                    <div>
-                                        <strong>Screenshot Protection</strong>
-                                        <span id="screenshot-protection-status" class="screenshot-status-badge screenshot-status-on">Active</span>
-                                    </div>
-                                </div>
-                                <input type="checkbox" id="screenshot-protection" checked>
-                                <span class="toggle-slider screenshot-slider"></span>
-                            </label>
-                            <p class="setting-description">Prevents third-party apps (Time Doctor, proctoring tools, screen recorders) from capturing the browser content. Disable only if you need to share your screen.</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="ad-blocker" checked>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enable ad blocker</span>
-                            </label>
-                            <p class="setting-description">Block ads and trackers for faster browsing</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="do-not-track" checked>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Send "Do Not Track" requests</span>
-                            </label>
-                            <p class="setting-description">Ask websites not to track your browsing</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-label">Clear Browsing Data</label>
-                            <button class="setting-button" id="clear-data">Clear Data</button>
-                            <p class="setting-description">Remove cookies, cache, and browsing history</p>
-                        </div>
-
-                        <!-- Stealth Mode -->
-                        <div class="setting-group stealth-setting-group">
-                            <label class="setting-toggle stealth-toggle-row">
-                                <div class="stealth-toggle-info">
-                                    <span class="stealth-icon-wrap">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                                    </span>
-                                    <div>
-                                        <strong>Stealth Mode</strong>
-                                        <span id="stealth-badge" class="stealth-badge stealth-off">Off</span>
-                                    </div>
-                                </div>
-                                <input type="checkbox" id="stealth-mode-toggle">
-                                <span class="toggle-slider stealth-slider"></span>
-                            </label>
-                            <p class="setting-description">When enabled, closing the app makes it completely invisible — no taskbar button, no tray icon. Only your secret code can restore it.</p>
-
-                            <div class="stealth-code-panel" id="stealth-code-panel">
-                                <label class="setting-label" style="margin-top:14px;">Secret Code</label>
-                                <div class="stealth-code-row">
-                                    <input type="text" class="setting-input" id="stealth-code-input" placeholder="e.g. myapp2024" maxlength="20" autocomplete="off" spellcheck="false">
-                                    <button class="setting-button stealth-save-btn" id="stealth-code-save">Save</button>
-                                </div>
-                                <p class="setting-description" style="margin-top:4px;">Letters and numbers only, 3–20 chars, must start with a letter.</p>
-                                <div class="stealth-run-hint" id="stealth-run-hint">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                                    Press <kbd>Win</kbd>+<kbd>R</kbd>, type <code id="stealth-run-cmd">quantumx://</code> to restore the app
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Monitoring Threat Detector -->
-                    <div class="setting-group" id="monitor-detect-group">
-                        <div class="setting-status">
-                            <span class="status-icon" id="monitor-icon">🛡️</span>
-                            <div>
-                                <strong>Tracking Software Detector</strong>
-                                <span id="monitor-badge" class="stealth-badge stealth-off" style="margin-left:8px">Safe</span>
-                            </div>
-                        </div>
-                        <p class="setting-description" id="monitor-desc">Scans for employee monitoring apps every 30 seconds.</p>
-                        <div id="monitor-alert" style="display:none;margin-top:10px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:10px;font-size:13px;color:#fca5a5;line-height:1.6;">
-                            <strong style="color:#ef4444;">⚠ Monitoring software detected:</strong>
-                            <div id="monitor-apps-list" style="margin-top:4px;opacity:.9;"></div>
-                        </div>
-                        <button class="setting-button" id="monitor-scan-btn" style="margin-top:10px;font-size:12px;padding:6px 14px;">Scan Now</button>
-                    </div>
-
-                    <!-- Quick Toggle Shortcut -->
-                    <div class="setting-group" id="hotkey-setting-group">
-                        <label class="setting-label">Quick Toggle Shortcut</label>
-                        <p class="setting-description">Press this shortcut anywhere to instantly show or hide the browser window.</p>
-                        <div class="stealth-code-row">
-                            <input type="text" class="setting-input" id="hotkey-input" placeholder="Click Record, then press your keys" readonly autocomplete="off" spellcheck="false">
-                            <button class="setting-button stealth-save-btn" id="hotkey-record-btn">Record</button>
-                            <button class="setting-button stealth-save-btn" id="hotkey-save-btn">Save</button>
-                        </div>
-                        <p class="setting-description" id="hotkey-status" style="margin-top:4px; color: var(--accent-gold);"></p>
-                    </div>
-
-                    <!-- Performance Settings -->
-                    <div class="settings-section" id="section-performance">
-                        <h3>Performance</h3>
-                        
-                        <div class="setting-group">
-                            <div class="setting-status">
-                                <span class="status-icon">⚡</span>
-                                <div>
-                                    <strong>Hardware Acceleration</strong>
-                                    <p class="status-active">Enabled</p>
-                                </div>
-                            </div>
-                            <p class="setting-description">Uses GPU for faster rendering</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="preload-pages" checked>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Preload pages for faster browsing</span>
-                            </label>
-                            <p class="setting-description">Predict and preload pages you might visit</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="lazy-load-images" checked>
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Lazy load images</span>
-                            </label>
-                            <p class="setting-description">Load images only when needed to save bandwidth</p>
-                        </div>
-                    </div>
-
-                    <!-- Advanced Settings -->
-                    <div class="settings-section" id="section-advanced">
-                        <h3>Advanced</h3>
-                        
-                        <div class="setting-group">
-                            <label class="setting-toggle">
-                                <input type="checkbox" id="developer-tools">
-                                <span class="toggle-slider"></span>
-                                <span class="toggle-label">Enable Developer Tools</span>
-                            </label>
-                            <p class="setting-description">Press F12 to open developer tools</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-label">User Agent</label>
-                            <input type="text" class="setting-input" id="user-agent" placeholder="Default" readonly>
-                            <p class="setting-description">Browser identification string</p>
-                        </div>
-
-                        <div class="setting-group">
-                            <label class="setting-button-group">
-                                <button class="setting-button" id="reset-settings">Reset to Defaults</button>
-                            </label>
-                            <p class="setting-description">Restore all settings to their default values</p>
-                        </div>
-                    </div>
-
-                    <!-- Features Section -->
-                    <div class="settings-section" id="section-features">
-                        <h3>Features</h3>
-
-                        <!-- Grammar Assistant -->
-                        <div class="setting-group grammar-assistant-group" id="grammar-assistant-group">
-                            <label class="setting-toggle grammar-toggle-row">
-                                <div class="grammar-toggle-info">
-                                    <span class="grammar-icon-wrap">✍️</span>
-                                    <div>
-                                        <strong>Grammar Assistant</strong>
-                                        <span id="grammar-assistant-status" class="grammar-status-badge grammar-status-off">Off</span>
-                                    </div>
-                                </div>
-                                <input type="checkbox" id="grammar-assistant-toggle">
-                                <span class="toggle-slider grammar-slider"></span>
-                            </label>
-                            <p class="setting-description">
-                                Real-time spelling, grammar, style &amp; punctuation checks on every text field —
-                                powered by LanguageTool. Works on any website, online notepad, typing test, or
-                                classroom tool. Highlights errors with coloured underlines and rewrites words
-                                in-place when you click a suggestion. Fully stealth — invisible to proctoring software.
-                            </p>
-                            <div class="grammar-legend" id="grammar-legend">
-                                <span class="grammar-legend-dot" style="background:#ef4444"></span><span>Spelling</span>
-                                <span class="grammar-legend-dot" style="background:#f59e0b"></span><span>Grammar</span>
-                                <span class="grammar-legend-dot" style="background:#3b82f6"></span><span>Style</span>
-                                <span class="grammar-legend-dot" style="background:#a855f7"></span><span>Punctuation</span>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <!-- About Section -->
-                    <div class="settings-section" id="section-about">
-                        <h3>About QuantumX</h3>
-                        
-                        <div class="about-info">
-                            <img src="assets/logo.svg" alt="QuantumX" class="about-logo">
-                            <h2>QuantumX</h2>
-                            <p class="version">Version 2.0.0</p>
-                            <p class="tagline">Lightning-Fast Speed • Military-Grade Security • Complete Privacy</p>
-                            
-                            <div class="about-details">
-                                <div class="about-item">
-                                    <strong>🛡️ Screenshot Protection:</strong>
-                                    <span class="status-active">Active</span>
-                                </div>
-                                <div class="about-item">
-                                    <strong>⚡ Performance Mode:</strong>
-                                    <span class="status-active">Enabled</span>
-                                </div>
-                                <div class="about-item">
-                                    <strong>🚫 Ad Blocker:</strong>
-                                    <span class="status-active">Running</span>
-                                </div>
-                                <div class="about-item">
-                                    <strong>Based on:</strong>
-                                    <span>Electron 34 (Chromium 132)</span>
-                                </div>
-                            </div>
-
-                            <div class="about-buttons">
-                                <button class="about-button">Check for Updates</button>
-                                <button class="about-button">View License</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="dl-meta">
+                <div class="dl-meta-item">✓ &nbsp;100% Free</div>
+                <div class="dl-meta-dot"></div>
+                <div class="dl-meta-item">✓ &nbsp;No Account Needed</div>
+                <div class="dl-meta-dot"></div>
+                <div class="dl-meta-item">✓ &nbsp;No Telemetry</div>
+                <div class="dl-meta-dot"></div>
+                <div class="dl-meta-item">✓ &nbsp;Auto-Updates</div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Welcome Screen (shown on new tab) -->
-    <div id="welcome-screen" class="welcome-screen">
-        <div class="welcome-content">
-            <div class="logo-container">
-                <img src="assets/logo.svg" alt="QuantumX" class="main-logo">
-            </div>
-            <h1 class="browser-title">QuantumX</h1>
-            <p class="tagline">Lightning-Fast Speed • Military-Grade Security • Complete Privacy</p>
-            <div class="search-box">
-                <input type="text" id="welcome-search" placeholder="Search the web or enter address" />
-            </div>
-            <div class="features">
-                <div class="feature-card">
-                    <div class="feature-icon">🛡️</div>
-                    <h3>Screenshot Protection</h3>
-                    <p>Third-party apps cannot capture your screen</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🚫</div>
-                    <h3>Ad Blocker</h3>
-                    <p>Built-in ad and tracker blocking</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3>Fast & Secure</h3>
-                    <p>Based on Chromium for speed and security</p>
-                </div>
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-inner">
+            <a class="footer-brand" href="#">
+                <img src="assets/logo.svg" alt="QuantumX">
+                <span>QuantumX</span>
+            </a>
+            <div class="footer-copy">© 2025 QuantumX · Built for Windows</div>
+            <div class="footer-chips">
+                <div class="footer-chip">Free</div>
+                <div class="footer-chip">Windows</div>
+                <div class="footer-chip">64-bit</div>
             </div>
         </div>
-    </div>
+    </footer>
 
-    <!-- VPN Panel -->
-    <div id="vpn-panel" class="side-panel vpn-panel" style="display: none;">
-        <div class="panel-header vpn-header">
-            <div class="vpn-header-content">
-                <h2>🛡️ Proton VPN</h2>
-                <div class="vpn-connection-status">
-                    <span class="vpn-status-indicator" id="vpn-status-indicator">●</span>
-                    <span id="vpn-status-text">Disconnected</span>
-                </div>
-            </div>
-            <button class="panel-close" id="vpn-close">✕</button>
-        </div>
+</div><!-- .page -->
 
-        <div class="panel-body vpn-body">
-            <!-- VPN Connection Card -->
-            <div class="vpn-connection-card">
-                <div class="vpn-quick-connect">
-                    <button id="vpn-connect-btn" class="vpn-connect-button">
-                        <span class="vpn-connect-icon">🚀</span>
-                        <span class="vpn-connect-text">Quick Connect</span>
-                    </button>
-                    <div class="vpn-selected-server" id="vpn-selected-server">
-                        <div class="server-flag">🌍</div>
-                        <div class="server-info">
-                            <div class="server-name">Select a server</div>
-                            <div class="server-location">No server selected</div>
-                        </div>
-                    </div>
-                </div>
+<script>
+/* ── CURSOR ───────────────────────────── */
+const cur  = document.getElementById('cur');
+const ring = document.getElementById('cur-ring');
+let mx=0,my=0,rx=0,ry=0;
+document.addEventListener('mousemove', e => {
+    mx=e.clientX; my=e.clientY;
+    cur.style.left=mx+'px'; cur.style.top=my+'px';
+});
+(function trackRing(){
+    rx += (mx-rx)*.1; ry += (my-ry)*.1;
+    ring.style.left=rx+'px'; ring.style.top=ry+'px';
+    requestAnimationFrame(trackRing);
+})();
+document.querySelectorAll('a,button,.mystery-card').forEach(el=>{
+    el.addEventListener('mouseenter',()=>document.body.classList.add('cursor-hover'));
+    el.addEventListener('mouseleave',()=>document.body.classList.remove('cursor-hover'));
+});
 
-                <!-- Connection Stats (Hidden when disconnected) -->
-                <div class="vpn-stats" id="vpn-stats" style="display: none;">
-                    <div class="vpn-stat-item">
-                        <span class="stat-label">⬆️ Upload</span>
-                        <span class="stat-value" id="vpn-upload">0 KB/s</span>
-                    </div>
-                    <div class="vpn-stat-item">
-                        <span class="stat-label">⬇️ Download</span>
-                        <span class="stat-value" id="vpn-download">0 KB/s</span>
-                    </div>
-                    <div class="vpn-stat-item">
-                        <span class="stat-label">⏱️ Duration</span>
-                        <span class="stat-value" id="vpn-duration">00:00:00</span>
-                    </div>
-                    <div class="vpn-stat-item">
-                        <span class="stat-label">📡 Latency</span>
-                        <span class="stat-value" id="vpn-latency">0 ms</span>
-                    </div>
-                </div>
-            </div>
+/* ── DEEP-SPACE CANVAS ────────────────── */
+(function(){
+    const cv = document.getElementById('bg-canvas');
+    const ctx = cv.getContext('2d');
+    let stars=[], nebulae=[];
+    const COLORS=['#06B6D4','#7C3AED','#F59E0B','#F43F5E','#ffffff'];
 
-            <!-- VPN Features -->
-            <div class="vpn-features">
-                <div class="vpn-feature-item">
-                    <label class="vpn-toggle">
-                        <input type="checkbox" id="vpn-kill-switch" checked>
-                        <span class="vpn-toggle-slider"></span>
-                    </label>
-                    <div class="vpn-feature-info">
-                        <span class="feature-name">Kill Switch</span>
-                        <span class="feature-desc">Block internet if VPN drops</span>
-                    </div>
-                </div>
-                <div class="vpn-feature-item">
-                    <label class="vpn-toggle">
-                        <input type="checkbox" id="vpn-dns-protection" checked>
-                        <span class="vpn-toggle-slider"></span>
-                    </label>
-                    <div class="vpn-feature-info">
-                        <span class="feature-name">DNS Leak Protection</span>
-                        <span class="feature-desc">Prevent DNS leaks</span>
-                    </div>
-                </div>
-                <div class="vpn-feature-item">
-                    <label class="vpn-toggle">
-                        <input type="checkbox" id="vpn-auto-connect">
-                        <span class="vpn-toggle-slider"></span>
-                    </label>
-                    <div class="vpn-feature-info">
-                        <span class="feature-name">Auto-Connect</span>
-                        <span class="feature-desc">Connect on browser start</span>
-                    </div>
-                </div>
-            </div>
+    function resize(){
+        cv.width=innerWidth; cv.height=innerHeight;
+    }
+    function init(){
+        stars=[];
+        for(let i=0;i<220;i++){
+            stars.push({
+                x:Math.random()*cv.width,
+                y:Math.random()*cv.height,
+                r:Math.random()*1.5+.15,
+                a:Math.random()*.8+.1,
+                twinkle:Math.random()*.025+.005,
+                dir:Math.random()*2-1,
+                color:Math.random()<.15?COLORS[Math.floor(Math.random()*4)]:'#fff'
+            });
+        }
+        nebulae=[
+            {x:cv.width*.15,y:cv.height*.2,r:300,color:'rgba(124,58,237,',a:.04},
+            {x:cv.width*.85,y:cv.height*.35,r:250,color:'rgba(6,182,212,',a:.04},
+            {x:cv.width*.5,y:cv.height*.75,r:280,color:'rgba(245,158,11,',a:.025},
+        ];
+    }
+    function draw(){
+        ctx.clearRect(0,0,cv.width,cv.height);
 
-            <!-- Server List -->
-            <div class="vpn-server-section">
-                <div class="vpn-section-header">
-                    <h3>🌍 Server Locations</h3>
-                    <span class="server-count" id="server-count">24 servers</span>
-                </div>
-                
-                <div class="vpn-server-filter">
-                    <input type="text" id="vpn-server-search" placeholder="🔍 Search servers..." />
-                    <select id="vpn-server-sort">
-                        <option value="country">Country</option>
-                        <option value="latency">Latency</option>
-                        <option value="load">Load</option>
-                    </select>
-                </div>
+        // nebula blobs
+        for(const n of nebulae){
+            const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r);
+            g.addColorStop(0,n.color+n.a+')');
+            g.addColorStop(1,n.color+'0)');
+            ctx.beginPath();
+            ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+            ctx.fillStyle=g; ctx.fill();
+        }
 
-                <div class="vpn-server-list" id="vpn-server-list">
-                    <!-- Servers will be populated here -->
-                </div>
-            </div>
-        </div>
-    </div>
+        // stars
+        for(const s of stars){
+            ctx.beginPath();
+            ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+            ctx.fillStyle=s.color==='#fff'
+                ?`rgba(255,255,255,${s.a})`
+                :s.color+(s.r>1.1?'dd':'88');
+            ctx.fill();
+            s.a+=s.twinkle*s.dir;
+            if(s.a>=.9||s.a<=.05) s.dir*=-1;
+        }
+        requestAnimationFrame(draw);
+    }
+    resize(); init(); draw();
+    window.addEventListener('resize',()=>{ resize(); init(); });
+})();
 
-    <!-- Bookmarks Panel -->
-    <div id="bookmarks-panel" class="side-panel" style="display: none;">
-        <div class="panel-header">
-            <h2>⭐ Bookmarks</h2>
-            <button class="panel-close" id="bookmarks-close">✕</button>
-        </div>
-        <div class="panel-body">
-            <div class="panel-toolbar">
-                <button id="add-bookmark-btn" class="panel-action-btn">
-                    ➕ Add Current Page
-                </button>
-            </div>
-            <div id="bookmarks-list" class="bookmarks-list">
-                <!-- Bookmarks will be added here -->
-            </div>
-        </div>
-    </div>
+/* ── MARQUEE BUILD ────────────────────── */
+const ITEMS=[
+    'Speed','Privacy','Power','Control',
+    'QuantumX','Windows','Free','No Ads',
+    'No Tracking','Auto-Updates','Security','Performance',
+];
+const DOTS=['#06B6D4','#7C3AED','#F59E0B','#F43F5E'];
+const track=document.getElementById('strip-track');
+[...ITEMS,...ITEMS].forEach((t,i)=>{
+    const d=document.createElement('div');
+    d.className='strip-item';
+    const dot=document.createElement('span');
+    dot.className='strip-gem';
+    dot.style.background=DOTS[i%4];
+    dot.style.boxShadow=`0 0 8px ${DOTS[i%4]}`;
+    d.appendChild(dot);
+    d.appendChild(document.createTextNode(t));
+    track.appendChild(d);
+});
 
-    <!-- Downloads Panel -->
-    <div id="downloads-panel" class="side-panel professional-download-panel" style="display: none;">
-        <div class="panel-header download-header">
-            <div class="download-header-left">
-                <h2>⬇️ Downloads</h2>
-                <div class="download-stats">
-                    <span id="download-count">0 active</span>
-                    <span class="stat-separator">•</span>
-                    <span id="download-speed">0 KB/s</span>
-                </div>
-            </div>
-            <button class="panel-close" id="downloads-close">✕</button>
-        </div>
-        
-        <!-- Download Actions Bar -->
-        <div class="download-actions-bar">
-            <div class="download-filters">
-                <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="downloading">Downloading</button>
-                <button class="filter-btn" data-filter="completed">Completed</button>
-                <button class="filter-btn" data-filter="failed">Failed</button>
-            </div>
-            <div class="download-actions">
-                <button class="action-icon-btn" id="pause-all-btn" title="Pause All">⏸️</button>
-                <button class="action-icon-btn" id="resume-all-btn" title="Resume All">▶️</button>
-                <button class="action-icon-btn" id="clear-completed-btn" title="Clear Completed">🗑️</button>
-            </div>
-        </div>
+/* ── SCROLL REVEAL ────────────────────── */
+const obs=new IntersectionObserver(entries=>{
+    entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('vis'); });
+},{threshold:.1,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('[data-rev]').forEach(el=>obs.observe(el));
 
-        <!-- Quick Download Buttons -->
-        <div class="panel-body">
-            <div class="quick-download-section">
-                <button id="youtube-download-btn" class="quick-download-btn youtube-btn">
-                    <span class="btn-icon">📹</span>
-                    <span class="btn-text">YouTube Video</span>
-                </button>
-                <button id="torrent-download-btn" class="quick-download-btn torrent-btn">
-                    <span class="btn-icon">🧲</span>
-                    <span class="btn-text">Torrent</span>
-                </button>
-                <button id="open-downloads-folder-btn" class="quick-download-btn folder-btn">
-                    <span class="btn-icon">📁</span>
-                    <span class="btn-text">Open Folder</span>
-                </button>
-            </div>
-            
-            <div id="downloads-list" class="downloads-list professional-downloads-list">
-                <div class="empty-state">
-                    <div class="empty-icon">📥</div>
-                    <p>No downloads yet</p>
-                    <span class="empty-subtitle">Downloads will appear here automatically</span>
-                </div>
-            </div>
-        </div>
-    </div>
+/* ── NAV SCROLL ───────────────────────── */
+window.addEventListener('scroll',()=>{
+    document.getElementById('nav').classList.toggle('scrolled',scrollY>30);
+});
 
-    <!-- YouTube Download Modal -->
-    <div id="youtube-modal" class="modal-panel" style="display: none;">
-        <div class="modal-overlay"></div>
-        <div class="modal-container" style="max-width: 600px;">
-            <div class="modal-header">
-                <h2>📹 Download YouTube Video</h2>
-                <button class="modal-close" id="youtube-modal-close">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="download-input-group">
-                    <label>YouTube URL:</label>
-                    <input type="text" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=..." />
-                    <button id="youtube-fetch-btn" class="fetch-btn">Get Video Info</button>
-                </div>
-                <div id="youtube-info" style="display: none;">
-                    <div class="video-preview">
-                        <img id="youtube-thumbnail" src="" alt="Thumbnail" style="width: 100%; border-radius: 8px;" />
-                        <h3 id="youtube-title" style="margin: 12px 0; color: var(--text-primary);"></h3>
-                    </div>
-                    <div class="quality-selector">
-                        <label>Select Quality:</label>
-                        <select id="youtube-quality-select">
-                            <!-- Options will be populated dynamically -->
-                        </select>
-                    </div>
-                    <button id="youtube-start-download-btn" class="panel-action-btn" style="margin-top: 16px;">
-                        ⬇️ Start Download
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+/* ── CARD 3D TILT ─────────────────────── */
+document.querySelectorAll('.mystery-card').forEach(card=>{
+    card.addEventListener('mousemove',e=>{
+        const r=card.getBoundingClientRect();
+        const x=(e.clientX-r.left)/r.width-.5;
+        const y=(e.clientY-r.top)/r.height-.5;
+        card.style.transform=`translateY(-8px) rotateX(${-y*8}deg) rotateY(${x*8}deg)`;
+    });
+    card.addEventListener('mouseleave',()=>card.style.transform='');
+});
 
-    <!-- Torrent Download Modal -->
-    <div id="torrent-modal" class="modal-panel" style="display: none;">
-        <div class="modal-overlay"></div>
-        <div class="modal-container" style="max-width: 600px;">
-            <div class="modal-header">
-                <h2>🧲 Download Torrent</h2>
-                <button class="modal-close" id="torrent-modal-close">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="download-input-group">
-                    <label>Magnet Link or Torrent URL:</label>
-                    <textarea id="torrent-url-input" placeholder="magnet:?xt=urn:btih:..." rows="4"></textarea>
-                    <button id="torrent-start-download-btn" class="panel-action-btn" style="margin-top: 16px;">
-                        ⬇️ Start Torrent Download
-                    </button>
-                </div>
-                <div class="info-box" style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid var(--accent-yellow);">
-                    <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
-                        📌 Torrents will be downloaded to: Downloads/Torrents folder
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
+/* ── GITHUB RELEASE ───────────────────── */
+const GH_USER='MuhammadShoaib00';
+const GH_REPO='QuantumX';
 
-    <!-- History Panel -->
-    <div id="history-panel" class="side-panel" style="display: none;">
-        <div class="panel-header">
-            <h2>📜 History</h2>
-            <button class="panel-close" id="history-close">✕</button>
-        </div>
-        <div class="panel-body">
-            <div class="panel-toolbar">
-                <button id="clear-history-btn" class="panel-action-btn danger">
-                    🗑️ Clear All History
-                </button>
-            </div>
-            <div id="history-list" class="history-list">
-                <!-- History will be added here -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Find in Page Bar -->
-    <div id="find-bar" class="find-bar" style="display: none;">
-        <input type="text" id="find-input" placeholder="Find in page..." />
-        <div class="find-controls">
-            <span id="find-results">0/0</span>
-            <button id="find-prev" title="Previous">▲</button>
-            <button id="find-next" title="Next">▼</button>
-            <button id="find-close" title="Close">✕</button>
-        </div>
-    </div>
-
-    <!-- Zoom Controls (floating) -->
-    <div id="zoom-controls" class="zoom-popup" style="display: none;">
-        <button id="zoom-out" class="zoom-btn">➖</button>
-        <span id="zoom-level">100%</span>
-        <button id="zoom-in" class="zoom-btn">➕</button>
-        <button id="zoom-reset" class="zoom-btn">↺</button>
-    </div>
-
-    <!-- Keyboard Shortcuts Help -->
-    <div id="shortcuts-panel" class="modal-panel" style="display: none;">
-        <div class="modal-overlay"></div>
-        <div class="modal-container">
-            <div class="modal-header">
-                <h2>⌨️ Keyboard Shortcuts</h2>
-                <button class="modal-close" id="shortcuts-close">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="shortcuts-grid">
-                    <div class="shortcut-section">
-                        <h3>Tabs</h3>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>T</kbd>
-                            <span>New Tab</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>W</kbd>
-                            <span>Close Tab</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>Tab</kbd>
-                            <span>Next Tab</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd>
-                            <span>Previous Tab</span>
-                        </div>
-                    </div>
-                    <div class="shortcut-section">
-                        <h3>Navigation</h3>
-                        <div class="shortcut-item">
-                            <kbd>Alt</kbd> + <kbd>←</kbd>
-                            <span>Back</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Alt</kbd> + <kbd>→</kbd>
-                            <span>Forward</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>F5</kbd> or <kbd>Ctrl</kbd> + <kbd>R</kbd>
-                            <span>Reload</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>L</kbd>
-                            <span>Focus Address Bar</span>
-                        </div>
-                    </div>
-                    <div class="shortcut-section">
-                        <h3>Page</h3>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>F</kbd>
-                            <span>Find in Page</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>P</kbd>
-                            <span>Print</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>+</kbd>
-                            <span>Zoom In</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>-</kbd>
-                            <span>Zoom Out</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>0</kbd>
-                            <span>Reset Zoom</span>
-                        </div>
-                    </div>
-                    <div class="shortcut-section">
-                        <h3>Tools</h3>
-                        <div class="shortcut-item">
-                            <kbd>F12</kbd>
-                            <span>Developer Tools</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>H</kbd>
-                            <span>History</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>B</kbd>
-                            <span>Bookmarks</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>J</kbd>
-                            <span>Downloads</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Delete</kbd>
-                            <span>Clear Browsing Data</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Update Notification -->
-    <div id="update-notification" class="update-notification hidden">
-        <div class="update-content">
-            <div class="update-icon">🔄</div>
-            <div class="update-text">
-                <div class="update-title">Update Available</div>
-                <div class="update-message" id="update-message">A new version is available. Downloading...</div>
-                <div class="update-progress">
-                    <div class="update-progress-bar" id="update-progress-bar"></div>
-                </div>
-            </div>
-            <button class="update-close" id="update-close">✕</button>
-        </div>
-    </div>
-
-    <!-- Window Picker Modal -->
-    <div id="window-picker-modal" class="window-picker-modal">
-        <div class="window-picker-box">
-            <div class="window-picker-header">
-                <span>Embed a Desktop App</span>
-                <button id="window-picker-close" class="window-picker-close-btn">✕</button>
-            </div>
-            <div class="window-picker-search-wrap">
-                <svg class="window-picker-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input type="text" id="window-picker-search-input" class="window-picker-search-input" placeholder="Search windows…" autocomplete="off">
-            </div>
-            <div id="window-picker-list" class="window-picker-list">
-                <!-- populated by renderer.js -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Launch Loader -->
-    <div id="launch-loader" class="launch-loader">
-        <div class="launch-loader-box">
-            <div class="launch-loader-spinner"></div>
-            <div id="launch-loader-msg" class="launch-loader-msg">Launching app…</div>
-            <div class="launch-loader-sub">Waiting for window to appear</div>
-        </div>
-    </div>
-
-    <script src="renderer.js"></script>
+async function fetchRelease(){
+    try{
+        const res=await fetch(`https://api.github.com/repos/${GH_USER}/${GH_REPO}/releases/latest`);
+        if(!res.ok) throw 0;
+        const d=await res.json();
+        const v=d.tag_name?.replace('v','')||'';
+        if(v){
+            document.getElementById('hero-ver').textContent=`v${v}`;
+            document.getElementById('ver-chip').textContent=`v${v}`;
+        }
+        const asset=d.assets?.find(a=>a.name.endsWith('.exe')||a.name.includes('Setup'));
+        const url=asset?.browser_download_url
+            ||`https://github.com/${GH_USER}/${GH_REPO}/releases/latest`;
+        document.getElementById('hero-dl').href=url;
+        document.getElementById('main-dl-btn').href=url;
+    }catch{
+        const fb=`https://github.com/${GH_USER}/${GH_REPO}/releases/latest`;
+        document.getElementById('hero-dl').href=fb;
+        document.getElementById('main-dl-btn').href=fb;
+    }
+}
+fetchRelease();
+</script>
 </body>
 </html>
-
