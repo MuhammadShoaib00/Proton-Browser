@@ -49,6 +49,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Monitoring detection
   checkMonitoringApps: () => ipcRenderer.invoke('check-monitoring-apps'),
   getMonitoringStatus: () => ipcRenderer.invoke('get-monitoring-status'),
-  onMonitoringDetected: (cb) => ipcRenderer.on('monitoring-detected', (_, data) => cb(data))
+  onMonitoringDetected: (cb) => ipcRenderer.on('monitoring-detected', (_, data) => cb(data)),
+  // Window embedding
+  getWindowsList: () => ipcRenderer.invoke('get-windows-list'),
+  embedWindow: (opts) => ipcRenderer.invoke('embed-window', opts),
+  launchAndEmbed: (opts) => ipcRenderer.invoke('launch-and-embed', opts),
+  moveEmbedWindow: (opts) => ipcRenderer.invoke('move-embed-window', opts),
+  showEmbedWindow: (opts) => ipcRenderer.invoke('show-embed-window', opts),
+  releaseEmbedWindow: (opts) => ipcRenderer.invoke('release-embed-window', opts),
+  isWindowValid: (opts) => ipcRenderer.invoke('is-window-valid', opts),
+  getWindowIcon: (opts) => ipcRenderer.invoke('get-window-icon', opts)
 });
 

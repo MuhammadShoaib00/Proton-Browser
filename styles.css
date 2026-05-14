@@ -3164,3 +3164,310 @@ body {
     color: #60a5fa;
     font-family: 'Courier New', monospace;
 }
+
+/* ── Window Embedding ─────────────────────────────────────────────────────── */
+
+/* Embed tab — distinct icon color */
+.tab[data-tab-type="embed"] .tab-favicon {
+    filter: hue-rotate(200deg) saturate(1.5);
+}
+
+/* Drag-over drop indicator on the webview container */
+#webview-container.drag-over {
+    outline: 2px dashed var(--accent-blue, #60a5fa);
+    outline-offset: -4px;
+}
+#webview-container.drag-over::after {
+    content: 'Drop .exe to embed as tab';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent-blue, #60a5fa);
+    background: rgba(96, 165, 250, 0.08);
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Window picker modal */
+#window-picker-modal {
+    display: none;
+}
+#window-picker-modal.open {
+    display: flex !important;
+}
+.window-picker-box {
+    background: var(--bg-secondary, #1e2130);
+    border: 1px solid var(--border-color, #2d3148);
+    border-radius: 14px;
+    padding: 0;
+    width: 480px;
+    max-height: 520px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    overflow: hidden;
+}
+.window-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color, #2d3148);
+    font-weight: 600;
+    font-size: 14px;
+}
+.window-picker-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary, #8b9dc3);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    line-height: 1;
+}
+.window-picker-close-btn:hover {
+    background: var(--bg-hover, rgba(255,255,255,.07));
+    color: var(--text-primary, #e2e8f0);
+}
+.window-picker-list {
+    overflow-y: auto;
+    padding: 8px;
+    flex: 1;
+}
+.window-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary, #e2e8f0);
+    transition: background 0.15s;
+}
+.window-picker-item:hover {
+    background: var(--bg-hover, rgba(255,255,255,.07));
+}
+.window-picker-item-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+.window-picker-item-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.window-picker-empty {
+    text-align: center;
+    padding: 32px 20px;
+    color: var(--text-secondary, #8b9dc3);
+    font-size: 13px;
+}
+.embed-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-dark, #0f1117);
+    color: var(--text-secondary, #8b9dc3);
+    font-size: 14px;
+    gap: 8px;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+.embed-placeholder.active {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ── Window Picker Modal (production) ────────────────────────────────────── */
+@keyframes modal-in {
+    from { opacity: 0; transform: scale(.94) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes modal-overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.window-picker-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.75);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+}
+.window-picker-modal.open {
+    display: flex;
+    animation: modal-overlay-in .15s ease;
+}
+.window-picker-modal.open .window-picker-box {
+    animation: modal-in .18s cubic-bezier(.2,.8,.4,1) forwards;
+}
+.window-picker-box {
+    background: var(--bg-secondary, #1a1e2e);
+    border: 1px solid var(--border-color, #2d3148);
+    border-radius: 14px;
+    width: 480px;
+    max-height: 560px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+}
+.window-picker-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color, #2d3148);
+    background: var(--bg-primary, #12151f);
+}
+.window-picker-search-icon {
+    color: var(--text-secondary, #8b9dc3);
+    flex-shrink: 0;
+}
+.window-picker-search-input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary, #e2e8f0);
+    font-size: 13px;
+    font-family: inherit;
+}
+.window-picker-search-input::placeholder { color: var(--text-secondary, #8b9dc3); }
+.window-picker-item-img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 4px;
+}
+.window-picker-item-exepath {
+    font-size: 11px;
+    color: var(--text-secondary, #8b9dc3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    margin-top: 2px;
+}
+.window-picker-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+.window-picker-item-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+.window-picker-item.hidden { display: none; }
+
+/* ── Embed Toolbar ───────────────────────────────────────────────────────── */
+.embed-toolbar {
+    height: 38px;
+    background: var(--bg-secondary, #1a1e2e);
+    border-bottom: 1px solid var(--border-color, #2d3148);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+.embed-toolbar-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    border-radius: 3px;
+}
+.embed-toolbar-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary, #e2e8f0);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.embed-toolbar-spacer { flex: 1; }
+.embed-toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-hover, rgba(255,255,255,.07));
+    border: 1px solid var(--border-color, #2d3148);
+    color: var(--text-primary, #e2e8f0);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s, border-color .15s;
+}
+.embed-toolbar-btn:hover { background: rgba(255,255,255,.12); }
+.embed-toolbar-btn-danger { border-color: rgba(239,68,68,.4); color: #f87171; }
+.embed-toolbar-btn-danger:hover { background: rgba(239,68,68,.15); border-color: rgba(239,68,68,.7); }
+
+/* ── Launch Loader ───────────────────────────────────────────────────────── */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.launch-loader {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    z-index: 9998;
+    align-items: center;
+    justify-content: center;
+}
+.launch-loader.open {
+    display: flex;
+}
+.launch-loader-box {
+    background: var(--bg-secondary, #1a1e2e);
+    border: 1px solid var(--border-color, #2d3148);
+    border-radius: 14px;
+    padding: 32px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    min-width: 260px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.5);
+}
+.launch-loader-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border-color, #2d3148);
+    border-top-color: var(--accent-blue, #60a5fa);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+.launch-loader-msg {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #e2e8f0);
+}
+.launch-loader-sub {
+    font-size: 12px;
+    color: var(--text-secondary, #8b9dc3);
+}
+
+/* ── Embed Tab type indicator ────────────────────────────────────────────── */
+.tab[data-tab-type="embed"] .tab-favicon { filter: hue-rotate(200deg); }

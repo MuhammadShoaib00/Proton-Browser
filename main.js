@@ -5,6 +5,13 @@ const fs = require('fs');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
 
+// Give the dev instance its own data directory so it never shares cache files
+// with the installed AppRuntime.exe that may already be running in the tray.
+// Shared cache = locked file handles = "Unable to move the cache" on every launch.
+if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'quantumx-dev'));
+}
+
 let mainWindow;
 let screenProtection;
 let activeDownloads = new Map();
@@ -709,6 +716,9 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
+// Delete the persist:secure partition HTTP cache before Chromium initialises it.
+// This prevents the "Unable to move the cache: Access is denied" errors that
+// occur when the previous run's process held file locks on Cache_Data/.
 app.on('ready', () => {
   // Disguise the process-level app identity in Windows shell / taskbar grouping.
   // This is the identity Windows uses for Jump Lists and some monitoring-tool
@@ -1481,6 +1491,63 @@ ipcMain.handle('check-monitoring-apps', async () => {
 
 ipcMain.handle('get-monitoring-status', () => {
   return { apps: _detectedMonitorApps, detected: _detectedMonitorApps.length > 0 };
+});
+
+// ── Window Embedding IPC ───────────────────────────────────────────────────
+ipcMain.handle('get-windows-list', () => {
+  if (!screenProtection?.enumVisibleWindows) return [];
+  try { return screenProtection.enumVisibleWindows(); } catch (e) { return []; }
+});
+
+ipcMain.handle('embed-window', (event, { hwnd, x, y, w, h }) => {
+  if (!screenProtection?.embedWindow) return { success: false, error: 'Native module unavailable' };
+  try {
+    const mainHwnd = mainWindow.getNativeWindowHandle().readUInt32LE(0);
+    screenProtection.embedWindow(mainHwnd, hwnd, x, y, w, h);
+    return { success: true };
+  } catch (e) { return { success: false, error: e.message }; }
+});
+
+ipcMain.handle('launch-and-embed', async (event, { exePath, x, y, w, h }) => {
+  if (!screenProtection?.launchAndGetWindow) return { success: false, error: 'Native module unavailable' };
+  try {
+    const res = screenProtection.launchAndGetWindow(exePath);
+    if (!res.hwnd) return { success: false, error: 'Window not found after launch' };
+    const mainHwnd = mainWindow.getNativeWindowHandle().readUInt32LE(0);
+    screenProtection.embedWindow(mainHwnd, res.hwnd, x, y, w, h);
+    return { success: true, hwnd: res.hwnd, pid: res.pid };
+  } catch (e) { return { success: false, error: e.message }; }
+});
+
+ipcMain.handle('move-embed-window', (event, { hwnd, x, y, w, h }) => {
+  if (!screenProtection?.moveEmbedWindow) return { success: false };
+  try { screenProtection.moveEmbedWindow(hwnd, x, y, w, h); return { success: true }; }
+  catch (e) { return { success: false, error: e.message }; }
+});
+
+ipcMain.handle('show-embed-window', (event, { hwnd, show }) => {
+  if (!screenProtection?.showHideEmbedWindow) return { success: false };
+  try { screenProtection.showHideEmbedWindow(hwnd, show); return { success: true }; }
+  catch (e) { return { success: false, error: e.message }; }
+});
+
+ipcMain.handle('release-embed-window', (event, { hwnd }) => {
+  if (!screenProtection?.releaseWindow) return { success: false };
+  try { screenProtection.releaseWindow(hwnd); return { success: true }; }
+  catch (e) { return { success: false, error: e.message }; }
+});
+
+ipcMain.handle('is-window-valid', (event, { hwnd }) => {
+  if (!screenProtection?.isWindowValid) return false;
+  try { return screenProtection.isWindowValid(hwnd); } catch (e) { return false; }
+});
+
+ipcMain.handle('get-window-icon', async (event, { exePath }) => {
+  if (!exePath) return null;
+  try {
+    const icon = await app.getFileIcon(exePath, { size: 'normal' });
+    return icon.toDataURL();
+  } catch (e) { return null; }
 });
 
 ipcMain.handle('get-stealth-config-full', () => {

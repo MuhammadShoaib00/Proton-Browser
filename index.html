@@ -97,6 +97,13 @@
                     <path d="M12 5v14M5 12h14"/>
                 </svg>
             </button>
+            <button id="capture-app-btn" class="nav-btn" title="Embed a desktop app as a tab">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <path d="M8 21h8M12 17v4"/>
+                    <path d="M9 10l3-3 3 3M12 7v6"/>
+                </svg>
+            </button>
             <button id="menu-btn" class="nav-btn" title="Menu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="1"/>
@@ -110,6 +117,26 @@
     <!-- Tabs Container -->
     <div class="tabs-container" id="tabs-container">
         <!-- Tabs will be dynamically added here -->
+    </div>
+
+    <!-- Embed Toolbar (shown only when an embed tab is active) -->
+    <div id="embed-toolbar" class="embed-toolbar" style="display:none">
+        <img id="embed-toolbar-icon" class="embed-toolbar-icon" src="" alt="" style="display:none">
+        <span id="embed-toolbar-title" class="embed-toolbar-title">App</span>
+        <div class="embed-toolbar-spacer"></div>
+        <button id="embed-detach-btn" class="embed-toolbar-btn" title="Detach window back to desktop">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            Detach
+        </button>
+        <button id="embed-close-btn" class="embed-toolbar-btn embed-toolbar-btn-danger" title="Close embed tab">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Close
+        </button>
     </div>
 
     <!-- Webview Container -->
@@ -945,6 +972,34 @@
                 </div>
             </div>
             <button class="update-close" id="update-close">✕</button>
+        </div>
+    </div>
+
+    <!-- Window Picker Modal -->
+    <div id="window-picker-modal" class="window-picker-modal">
+        <div class="window-picker-box">
+            <div class="window-picker-header">
+                <span>Embed a Desktop App</span>
+                <button id="window-picker-close" class="window-picker-close-btn">✕</button>
+            </div>
+            <div class="window-picker-search-wrap">
+                <svg class="window-picker-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input type="text" id="window-picker-search-input" class="window-picker-search-input" placeholder="Search windows…" autocomplete="off">
+            </div>
+            <div id="window-picker-list" class="window-picker-list">
+                <!-- populated by renderer.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Launch Loader -->
+    <div id="launch-loader" class="launch-loader">
+        <div class="launch-loader-box">
+            <div class="launch-loader-spinner"></div>
+            <div id="launch-loader-msg" class="launch-loader-msg">Launching app…</div>
+            <div class="launch-loader-sub">Waiting for window to appear</div>
         </div>
     </div>
 

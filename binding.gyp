@@ -17,7 +17,7 @@
       },
       "conditions": [
         ["OS=='win'", {
-          "libraries": [ "user32.lib", "dwmapi.lib" ]
+          "libraries": [ "user32.lib", "dwmapi.lib", "psapi.lib" ]
         }]
       ]
     }

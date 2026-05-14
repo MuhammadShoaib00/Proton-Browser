@@ -1,3 +1,12 @@
+// Global uncaught-error logger — surfaces real errors hidden behind
+// Electron's "GUEST_VIEW_MANAGER_CALL: Script failed to execute" proxy message.
+window.addEventListener('error', (e) => {
+    console.error('[renderer] Uncaught error:', e.message, '\n  at', e.filename + ':' + e.lineno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+    console.error('[renderer] Unhandled promise rejection:', e.reason);
+});
+
 // Tab Management
 class TabManager {
     constructor() {
@@ -11,6 +20,12 @@ class TabManager {
         // Create initial tab
         this.createTab('https://www.google.com');
         this.setupEventListeners();
+        // Defer embed setup to the next tick so Electron's webview guest-view
+        // manager can complete its IPC handshake before we attach more listeners.
+        setTimeout(() => {
+            try { this.setupEmbedFeature(); }
+            catch (e) { console.error('[embed] setup error:', e); }
+        }, 0);
     }
 
     setupEventListeners() {
@@ -71,12 +86,80 @@ class TabManager {
             id: tabId,
             url: url || '',
             title: 'New Tab',
+            type: 'web',
+            embedHwnd: null,
             webview: null
         };
 
         this.tabs.push(tab);
         this.renderTab(tab);
         this.createWebview(tab);
+        this.switchTab(tabId);
+    }
+
+    createEmbedTab(hwnd, title = 'App', exePath = '') {
+        this.tabCounter++;
+        const tabId = `tab-${this.tabCounter}`;
+
+        const tab = {
+            id: tabId,
+            url: '',
+            title,
+            type: 'embed',
+            embedHwnd: hwnd,
+            exePath,
+            embedIcon: null,
+            heartbeatInterval: null,
+            webview: null
+        };
+
+        this.tabs.push(tab);
+
+        // Load app icon asynchronously and update tab favicon
+        if (exePath && window.electronAPI?.getWindowIcon) {
+            window.electronAPI.getWindowIcon({ exePath }).then(dataUrl => {
+                if (!dataUrl) return;
+                tab.embedIcon = dataUrl;
+                const faviconEl = document.querySelector(`#tab-element-${tabId} .tab-favicon`);
+                if (faviconEl) faviconEl.innerHTML = `<img src="${dataUrl}" style="width:16px;height:16px;object-fit:contain;border-radius:3px">`;
+                // Update toolbar if this tab is currently active
+                if (this.activeTabId === tabId) this._updateEmbedToolbar(tab);
+            }).catch(() => {});
+        }
+
+        // Render tab element with embed icon
+        const tabsContainer = document.getElementById('tabs-container');
+        const tabElement = document.createElement('div');
+        tabElement.className = 'tab';
+        tabElement.id = `tab-element-${tabId}`;
+        tabElement.setAttribute('data-tab-type', 'embed');
+        tabElement.innerHTML = `
+            <div class="tab-favicon">⊞</div>
+            <span class="tab-title">${title}</span>
+            <button class="tab-close" data-tab-id="${tabId}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        `;
+        tabElement.addEventListener('click', (e) => {
+            if (!e.target.closest('.tab-close')) this.switchTab(tabId);
+        });
+        tabElement.querySelector('.tab-close').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.closeTab(tabId);
+        });
+        tabsContainer.appendChild(tabElement);
+
+        // Placeholder div (keeps layout consistent when embed is shown/hidden)
+        const container = document.getElementById('webview-container');
+        const placeholder = document.createElement('div');
+        placeholder.id = `webview-${tabId}`;
+        placeholder.className = 'embed-placeholder';
+        placeholder.innerHTML = `<span>⊞</span><span>${title} is embedded below</span>`;
+        container.appendChild(placeholder);
+
+        this._startEmbedHeartbeat(tabId);
         this.switchTab(tabId);
     }
 
@@ -2280,37 +2363,82 @@ class TabManager {
     }
 
     switchTab(tabId) {
-        // Hide all tabs and webviews
+        // Hide all tab elements and webviews
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.webview').forEach(w => w.classList.remove('active'));
+        document.querySelectorAll('.webview, .embed-placeholder').forEach(w => w.classList.remove('active'));
+
+        // Hide all currently visible embedded windows
+        if (window.electronAPI?.showEmbedWindow) {
+            this.tabs.forEach(t => {
+                if (t.type === 'embed' && t.embedHwnd && t.id !== tabId) {
+                    window.electronAPI.showEmbedWindow({ hwnd: t.embedHwnd, show: false });
+                }
+            });
+        }
 
         // Show active tab
         const tabElement = document.getElementById(`tab-element-${tabId}`);
-        const webview = document.getElementById(`webview-${tabId}`);
+        const el = document.getElementById(`webview-${tabId}`);
 
-        if (tabElement && webview) {
+        if (tabElement && el) {
             tabElement.classList.add('active');
-            webview.classList.add('active');
+            el.classList.add('active');
             this.activeTabId = tabId;
 
-            // Update address bar
             const tab = this.tabs.find(t => t.id === tabId);
+            const toolbar = document.getElementById('embed-toolbar');
             if (tab) {
-                document.getElementById('address-bar').value = tab.url;
-                
-                // Hide welcome screen if URL exists
-                if (tab.url) {
+                if (tab.type === 'embed') {
+                    document.getElementById('address-bar').value = '';
                     document.getElementById('welcome-screen').style.display = 'none';
+                    if (toolbar) { this._updateEmbedToolbar(tab); toolbar.style.display = 'flex'; }
+                    // Show + position the embedded window
+                    if (window.electronAPI?.showEmbedWindow && tab.embedHwnd) {
+                        const b = this._containerBounds();
+                        window.electronAPI.moveEmbedWindow({ hwnd: tab.embedHwnd, ...b });
+                        window.electronAPI.showEmbedWindow({ hwnd: tab.embedHwnd, show: true });
+                    }
                 } else {
-                    document.getElementById('welcome-screen').style.display = 'flex';
+                    if (toolbar) toolbar.style.display = 'none';
+                    document.getElementById('address-bar').value = tab.url;
+                    if (tab.url) {
+                        document.getElementById('welcome-screen').style.display = 'none';
+                    } else {
+                        document.getElementById('welcome-screen').style.display = 'flex';
+                    }
                 }
             }
         }
     }
 
+    _containerBounds() {
+        const el = document.getElementById('webview-container');
+        const r = el.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        return {
+            x: Math.round(r.x * dpr),
+            y: Math.round(r.y * dpr),
+            w: Math.round(r.width * dpr),
+            h: Math.round(r.height * dpr)
+        };
+    }
+
     closeTab(tabId) {
         const index = this.tabs.findIndex(t => t.id === tabId);
         if (index === -1) return;
+
+        // Release embedded window back to the desktop before removing
+        const tab = this.tabs[index];
+        if (tab.type === 'embed') {
+            if (tab.heartbeatInterval) { clearInterval(tab.heartbeatInterval); tab.heartbeatInterval = null; }
+            if (tab.embedHwnd && window.electronAPI?.releaseEmbedWindow) {
+                window.electronAPI.releaseEmbedWindow({ hwnd: tab.embedHwnd });
+            }
+            if (tab.id === this.activeTabId) {
+                const toolbar = document.getElementById('embed-toolbar');
+                if (toolbar) toolbar.style.display = 'none';
+            }
+        }
 
         // Remove tab and webview
         const tabElement = document.getElementById(`tab-element-${tabId}`);
@@ -3045,6 +3173,194 @@ class TabManager {
                     window.close();
                 }
                 break;
+        }
+    }
+
+    setupEmbedFeature() {
+        if (!window.electronAPI) return;
+
+        // Capture App button → open window picker
+        const captureBtn = document.getElementById('capture-app-btn');
+        if (captureBtn) captureBtn.addEventListener('click', () => this._openWindowPicker());
+
+        // Window picker modal close
+        const modal = document.getElementById('window-picker-modal');
+        const closeBtn = document.getElementById('window-picker-close');
+        if (closeBtn) closeBtn.addEventListener('click', () => modal.classList.remove('open'));
+        if (modal) {
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+        }
+
+        // Escape key closes the picker
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal?.classList.contains('open')) modal.classList.remove('open');
+        });
+
+        // Embed toolbar buttons
+        const detachBtn = document.getElementById('embed-detach-btn');
+        const embedCloseBtn = document.getElementById('embed-close-btn');
+        if (detachBtn) {
+            detachBtn.addEventListener('click', () => {
+                const tab = this.tabs.find(t => t.id === this.activeTabId);
+                if (tab?.type === 'embed') this.closeTab(tab.id);
+            });
+        }
+        if (embedCloseBtn) {
+            embedCloseBtn.addEventListener('click', () => {
+                const tab = this.tabs.find(t => t.id === this.activeTabId);
+                if (tab?.type === 'embed') this.closeTab(tab.id);
+            });
+        }
+
+        // Drag-drop .exe onto webview container
+        const container = document.getElementById('webview-container');
+        if (container) {
+            container.addEventListener('dragover', (e) => {
+                if ([...e.dataTransfer.items].some(i => i.kind === 'file')) {
+                    e.preventDefault();
+                    container.classList.add('drag-over');
+                }
+            });
+            container.addEventListener('dragleave', () => container.classList.remove('drag-over'));
+            container.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                container.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (!file || !file.name.toLowerCase().endsWith('.exe')) return;
+                await this._launchAndEmbedExe(file.path, file.name.replace(/\.exe$/i, ''));
+            });
+
+            // ResizeObserver — reposition the active embedded window when container resizes
+            new ResizeObserver(() => {
+                const active = this.tabs.find(t => t.id === this.activeTabId);
+                if (active?.type === 'embed' && active.embedHwnd && window.electronAPI?.moveEmbedWindow) {
+                    window.electronAPI.moveEmbedWindow({ hwnd: active.embedHwnd, ...this._containerBounds() });
+                }
+            }).observe(container);
+        }
+    }
+
+    _updateEmbedToolbar(tab) {
+        const titleEl = document.getElementById('embed-toolbar-title');
+        const iconEl  = document.getElementById('embed-toolbar-icon');
+        if (titleEl) titleEl.textContent = tab.title || 'App';
+        if (iconEl) {
+            if (tab.embedIcon) { iconEl.src = tab.embedIcon; iconEl.style.display = ''; }
+            else iconEl.style.display = 'none';
+        }
+    }
+
+    _startEmbedHeartbeat(tabId) {
+        const tab = this.tabs.find(t => t.id === tabId);
+        if (!tab || tab.type !== 'embed' || !window.electronAPI?.isWindowValid) return;
+        tab.heartbeatInterval = setInterval(async () => {
+            const t = this.tabs.find(x => x.id === tabId);
+            if (!t) { clearInterval(tab.heartbeatInterval); return; }
+            try {
+                const valid = await window.electronAPI.isWindowValid({ hwnd: t.embedHwnd });
+                if (!valid) {
+                    clearInterval(t.heartbeatInterval);
+                    t.heartbeatInterval = null;
+                    this.showNotification('App Closed', `"${t.title}" was closed and the tab was removed.`);
+                    this.closeTab(tabId);
+                }
+            } catch (e) {}
+        }, 5000);
+    }
+
+    async _openWindowPicker() {
+        const modal = document.getElementById('window-picker-modal');
+        const list  = document.getElementById('window-picker-list');
+        if (!modal || !list) return;
+
+        list.innerHTML = '<div class="window-picker-empty">Loading windows…</div>';
+        modal.classList.add('open');
+
+        // Reset and focus search
+        const rawSearch = document.getElementById('window-picker-search-input');
+        if (rawSearch) rawSearch.value = '';
+
+        let windows = [];
+        try { windows = await window.electronAPI.getWindowsList(); } catch (e) {}
+
+        if (!windows.length) {
+            list.innerHTML = '<div class="window-picker-empty">No open windows found.</div>';
+            return;
+        }
+
+        list.innerHTML = '';
+        for (const { hwnd, title, exePath } of windows) {
+            const safe = title.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const safeExe = (exePath || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const item = document.createElement('div');
+            item.className = 'window-picker-item';
+            item.dataset.title = title.toLowerCase();
+            item.innerHTML = `
+                <div class="window-picker-item-row">
+                    <span class="window-picker-item-icon">⊞</span>
+                    <span class="window-picker-item-title">${safe}</span>
+                </div>
+                ${safeExe ? `<div class="window-picker-item-exepath">${safeExe}</div>` : ''}
+            `;
+            // Load icon asynchronously
+            if (exePath && window.electronAPI?.getWindowIcon) {
+                window.electronAPI.getWindowIcon({ exePath }).then(dataUrl => {
+                    if (!dataUrl) return;
+                    const iconEl = item.querySelector('.window-picker-item-icon');
+                    if (iconEl) iconEl.outerHTML = `<img class="window-picker-item-img" src="${dataUrl}" alt="">`;
+                }).catch(() => {});
+            }
+            item.addEventListener('click', async () => {
+                modal.classList.remove('open');
+                const b = this._containerBounds();
+                try {
+                    await window.electronAPI.embedWindow({ hwnd, ...b });
+                    this.createEmbedTab(hwnd, title.substring(0, 30), exePath || '');
+                } catch (e) {
+                    this.showNotification('Embed Failed', 'Could not embed that window. Try again.');
+                }
+            });
+            list.appendChild(item);
+        }
+
+        // Wire search filter (replace node to clear old listeners)
+        const searchInput = document.getElementById('window-picker-search-input');
+        if (searchInput) {
+            const fresh = searchInput.cloneNode(true);
+            searchInput.parentNode.replaceChild(fresh, searchInput);
+            fresh.focus();
+            fresh.addEventListener('input', () => {
+                const q = fresh.value.toLowerCase();
+                list.querySelectorAll('.window-picker-item').forEach(el => {
+                    el.classList.toggle('hidden', q.length > 0 && !el.dataset.title.includes(q));
+                });
+            });
+        }
+    }
+
+    async _launchAndEmbedExe(exePath, title) {
+        const loader    = document.getElementById('launch-loader');
+        const loaderMsg = document.getElementById('launch-loader-msg');
+        if (loader) loader.classList.add('open');
+        if (loaderMsg) loaderMsg.textContent = `Launching ${title}…`;
+
+        const msgTimer = loaderMsg ? setTimeout(() => {
+            loaderMsg.textContent = 'Waiting for window to appear…';
+        }, 2500) : null;
+
+        const b = this._containerBounds();
+        try {
+            const result = await window.electronAPI.launchAndEmbed({ exePath, ...b });
+            if (result.success) {
+                this.createEmbedTab(result.hwnd, title.substring(0, 30), exePath);
+            } else {
+                this.showNotification('Launch Failed', result.error || 'Window did not appear in time.');
+            }
+        } catch (e) {
+            this.showNotification('Launch Error', 'An unexpected error occurred while launching the app.');
+        } finally {
+            if (msgTimer) clearTimeout(msgTimer);
+            if (loader) loader.classList.remove('open');
         }
     }
 }
