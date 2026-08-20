@@ -17,6 +17,12 @@ class TabManager {
     }
 
     init() {
+        // Wire main-process tab plumbing before creating any tab so we don't miss
+        // early dom-ready / navigation events.
+        this._setupTabEvents();
+        this._startBridgePoll();
+        this._watchOverlays();
+        this._watchContentBounds();
         // Create initial tab
         this.createTab('https://www.google.com');
         this.setupEventListeners();
@@ -52,6 +58,10 @@ class TabManager {
             }
         });
 
+        // Picture-in-Picture button
+        const pipBtn = document.getElementById('pip-btn');
+        if (pipBtn) pipBtn.addEventListener('click', () => this.triggerPiP());
+
         // Menu button
         document.getElementById('menu-btn').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -76,6 +86,68 @@ class TabManager {
 
         // Settings panel
         this.setupSettingsPanel();
+
+        // New-tab page (greeting, date, app shortcuts) + theme toggle
+        this.setupNewTabPage();
+        this.setupThemeToggle();
+    }
+
+    setupNewTabPage() {
+        // Time-based greeting + formatted date
+        const greetingEl = document.getElementById('nt-greeting');
+        const dateEl = document.getElementById('nt-date');
+        if (greetingEl && dateEl) {
+            const now = new Date();
+            const h = now.getHours();
+            const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+            greetingEl.textContent = greeting;
+            const dateStr = now.toLocaleDateString(undefined, {
+                weekday: 'long', month: 'long', day: 'numeric'
+            });
+            dateEl.textContent = `${dateStr} · QuantumX`;
+        }
+
+        // App shortcut tiles → navigate
+        document.querySelectorAll('.nt-tile[data-url]').forEach(tile => {
+            tile.addEventListener('click', () => {
+                const url = tile.getAttribute('data-url');
+                if (url) this.navigate(url);
+            });
+        });
+
+        // "Add" tile → focus the address bar
+        const addTile = document.getElementById('nt-tile-add');
+        if (addTile) {
+            addTile.addEventListener('click', () => {
+                const addr = document.getElementById('address-bar');
+                if (addr) { addr.focus(); addr.select(); }
+            });
+        }
+    }
+
+    setupThemeToggle() {
+        const btn = document.getElementById('theme-toggle-btn');
+        if (!btn) return;
+        const darkIcon = btn.querySelector('.theme-icon-dark');
+        const lightIcon = btn.querySelector('.theme-icon-light');
+
+        const apply = (theme) => {
+            const light = theme === 'light';
+            document.body.classList.toggle('light-theme', light);
+            if (darkIcon) darkIcon.style.display = light ? 'none' : '';
+            if (lightIcon) lightIcon.style.display = light ? '' : 'none';
+            // Make web page content (prefers-color-scheme) follow the theme too
+            if (window.electronAPI?.setNativeTheme) window.electronAPI.setNativeTheme(theme);
+        };
+
+        // Restore saved preference (default dark)
+        apply(localStorage.getItem('quantumx_theme') || 'dark');
+
+        btn.addEventListener('click', () => {
+            const next = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+            localStorage.setItem('quantumx_theme', next);
+            apply(next);
+        });
     }
 
     createTab(url = '') {
@@ -193,152 +265,188 @@ class TabManager {
     }
 
     createWebview(tab) {
-        const webviewContainer = document.getElementById('webview-container');
-        const webview = document.createElement('webview');
-        webview.id = `webview-${tab.id}`;
-        webview.className = 'webview';
-        webview.setAttribute('partition', 'persist:secure');
-        webview.setAttribute('allowpopups', '');
-        webview.setAttribute('useragent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36');
-        // NOTE: disablewebsecurity is intentionally NOT set — it removes the Origin
-        // header that OAuth flows (Google, Facebook, LinkedIn, etc.) require, breaking logins.
+        // Web tabs are hosted as main-process WebContentsViews. Create the view
+        // and attach a thin shim so existing injection / find / zoom / print code
+        // keeps working by routing through IPC.
+        const url = tab.url ? this.formatUrl(tab.url) : '';
+        window.electronAPI.tab.create(tab.id, url);
+        tab.webview = this._makeTabShim(tab.id);
+    }
 
-        // Set initial URL or blank page
-        if (tab.url) {
-            webview.src = this.formatUrl(tab.url);
+    // webview-compatible facade over the main-process WebContentsView (via IPC).
+    _makeTabShim(id) {
+        const api = window.electronAPI.tab;
+        return {
+            id,
+            isShim: true,
+            executeJavaScript: (code) => api.exec(id, code),
+            getURL: () => api.getURL(id),
+            reload: () => api.reload(id),
+            stop: () => api.stop(id),
+            print: () => api.print(id),
+            openDevTools: () => api.devtools(id),
+            findInPage: (text, opts) => api.find(id, text, opts),
+            stopFindInPage: () => api.stopFind(id),
+            setZoomFactor: (f) => api.zoom(id, f)
+        };
+    }
+
+    // Single dispatcher for page events forwarded from the main process. Replaces
+    // the per-<webview> event listeners that used to live in createWebview.
+    _setupTabEvents() {
+        if (this._tabEventsWired || !window.electronAPI?.tab?.onEvent) return;
+        this._tabEventsWired = true;
+        window.electronAPI.tab.onEvent((msg) => {
+            const id = msg.id;
+            switch (msg.type) {
+                case 'did-start-loading': this.updateLoadingState(id, true); break;
+                case 'did-stop-loading':  this.updateLoadingState(id, false); break;
+                case 'page-title-updated': {
+                    this.updateTabTitle(id, msg.title);
+                    const tab = this.tabs.find(t => t.id === id);
+                    if (window.historyManager && tab?.url) window.historyManager.addEntry(tab.url, msg.title);
+                    break;
+                }
+                case 'did-navigate': {
+                    this.updateTabUrl(id, msg.url);
+                    const tab = this.tabs.find(t => t.id === id);
+                    if (window.historyManager) window.historyManager.addEntry(msg.url, tab?.title || 'Untitled');
+                    break;
+                }
+                case 'did-navigate-in-page':
+                    this.updateTabUrl(id, msg.url);
+                    setTimeout(() => this._injectAll(id), 500);
+                    break;
+                case 'page-favicon-updated':
+                    if (msg.favicons && msg.favicons.length) this.updateTabFavicon(id, msg.favicons[0]);
+                    break;
+                case 'open-url':
+                    this.createTab(msg.url);
+                    break;
+                case 'dom-ready':
+                    this._injectAll(id);
+                    break;
+                case 'found-in-page':
+                    if (window.findManager && msg.result) window.findManager.updateResults(msg.result);
+                    break;
+            }
+        });
+    }
+
+    // Run all page injections for a web tab (mirrors the old dom-ready handler).
+    _injectAll(id) {
+        if (window.electronAPI?.flags?.noInject) return;  // dev bisect switch
+        const tab = this.tabs.find(t => t.id === id);
+        if (!tab || tab.type !== 'web' || !tab.webview) return;
+        this.injectChromeFingerprint(tab.webview);
+        // YouTube ad-blocking now runs entirely in page-preload.js at document-start
+        // (API ad-strip + IMA stub + cosmetic/skip) — no dom-ready injection needed.
+        this.injectYouTubeDownloader(tab.webview, id, tab.url);
+        if (localStorage.getItem('proton_grammar_enabled') === 'true') {
+            this.injectGrammarAssistant(tab.webview);
         }
+    }
 
-        // Webview event listeners
-        webview.addEventListener('did-start-loading', () => {
-            this.updateLoadingState(tab.id, true);
-        });
-
-        webview.addEventListener('did-stop-loading', () => {
-            this.updateLoadingState(tab.id, false);
-        });
-
-        webview.addEventListener('page-title-updated', (e) => {
-            this.updateTabTitle(tab.id, e.title);
-            // Add to history
-            if (window.historyManager && tab.url) {
-                window.historyManager.addEntry(tab.url, e.title);
-            }
-        });
-
-        webview.addEventListener('did-navigate', (e) => {
-            this.updateTabUrl(tab.id, e.url);
-            // Add to history
-            if (window.historyManager) {
-                const tabObj = this.tabs.find(t => t.id === tab.id);
-                window.historyManager.addEntry(e.url, tabObj?.title || 'Untitled');
-            }
-        });
-
-        webview.addEventListener('did-navigate-in-page', (e) => {
-            this.updateTabUrl(tab.id, e.url);
-        });
-
-        webview.addEventListener('new-window', (e) => {
-            this.createTab(e.url);
-        });
-
-        webview.addEventListener('page-favicon-updated', (e) => {
-            if (e.favicons && e.favicons.length > 0) {
-                this.updateTabFavicon(tab.id, e.favicons[0]);
-            }
-        });
-
-        // Inject on every page load
-        webview.addEventListener('dom-ready', () => {
-            this.injectChromeFingerprint(webview);
-            this.injectAdBlocker(webview);
-            this.injectYouTubeDownloader(webview, tab.id);
-            if (localStorage.getItem('proton_grammar_enabled') === 'true') {
-                this.injectGrammarAssistant(webview);
-            }
-        });
-
-        // Re-inject on SPA navigation (YouTube, Gmail, etc. are SPAs)
-        webview.addEventListener('did-navigate-in-page', () => {
-            setTimeout(() => {
-                this.injectChromeFingerprint(webview);
-                this.injectAdBlocker(webview);
-                this.injectYouTubeDownloader(webview, tab.id);
-                if (localStorage.getItem('proton_grammar_enabled') === 'true') {
-                    this.injectGrammarAssistant(webview);
-                }
-            }, 500);
-        });
-
-        // Bidirectional communication with injected script via sessionStorage polling
+    // Poll the active web tab for messages the injected scripts leave in
+    // sessionStorage (YouTube info/download, open-folder, grammar). Replaces the
+    // per-<webview> interval; one loop targets whichever web tab is active.
+    _startBridgePoll() {
+        if (this._bridgePollStarted) return;
+        if (window.electronAPI?.flags?.noInject) return;  // dev bisect switch
+        this._bridgePollStarted = true;
         const self = this;
-        setInterval(() => {
-            if (!webview.classList.contains('active')) return;
+        setInterval(async () => {
+            const tab = self.tabs.find(t => t.id === self.activeTabId);
+            if (!tab || tab.type !== 'web' || !tab.webview) return;
+            let msg;
+            try {
+                msg = await tab.webview.executeJavaScript(`
+                    (function() {
+                        const infoReq = sessionStorage.getItem('proton_info_request');
+                        const dlReq = sessionStorage.getItem('proton_download_request');
+                        const openFolder = sessionStorage.getItem('proton_open_folder');
+                        const grammarReq = sessionStorage.getItem('proton_grammar_request');
+                        if (infoReq) { sessionStorage.removeItem('proton_info_request'); return { type: 'info', data: JSON.parse(infoReq) }; }
+                        if (dlReq) { sessionStorage.removeItem('proton_download_request'); return { type: 'download', data: JSON.parse(dlReq) }; }
+                        if (openFolder) { sessionStorage.removeItem('proton_open_folder'); return { type: 'openFolder', path: openFolder }; }
+                        if (grammarReq) { sessionStorage.removeItem('proton_grammar_request'); return { type: 'grammar', data: JSON.parse(grammarReq) }; }
+                        return null;
+                    })();
+                `);
+            } catch (e) { return; }
+            if (!msg) return;
 
-            webview.executeJavaScript(`
-                (function() {
-                    const infoReq = sessionStorage.getItem('proton_info_request');
-                    const dlReq = sessionStorage.getItem('proton_download_request');
-                    const openFolder = sessionStorage.getItem('proton_open_folder');
-                    const grammarReq = sessionStorage.getItem('proton_grammar_request');
-                    if (infoReq) {
-                        sessionStorage.removeItem('proton_info_request');
-                        return { type: 'info', data: JSON.parse(infoReq) };
-                    }
-                    if (dlReq) {
-                        sessionStorage.removeItem('proton_download_request');
-                        return { type: 'download', data: JSON.parse(dlReq) };
-                    }
-                    if (openFolder) {
-                        sessionStorage.removeItem('proton_open_folder');
-                        return { type: 'openFolder', path: openFolder };
-                    }
-                    if (grammarReq) {
-                        sessionStorage.removeItem('proton_grammar_request');
-                        return { type: 'grammar', data: JSON.parse(grammarReq) };
-                    }
-                    return null;
-                })();
-            `).then(async (msg) => {
-                if (!msg) return;
-
-                if (msg.type === 'info') {
-                    // Fetch video info and send back to injected script
-                    try {
-                        const info = await window.electronAPI.getYouTubeInfo(msg.data.url);
-                        const infoJson = JSON.stringify(info).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-                        webview.executeJavaScript(`
-                            (function() {
-                                sessionStorage.setItem('proton_info_response', \`${infoJson}\`);
-                            })();
-                        `).catch(() => {});
-                    } catch (err) {
-                        const errJson = JSON.stringify({ success: false, error: err.message });
-                        webview.executeJavaScript(`
-                            sessionStorage.setItem('proton_info_response', '${errJson.replace(/'/g, "\\'")}');
-                        `).catch(() => {});
-                    }
+            if (msg.type === 'info') {
+                try {
+                    const info = await window.electronAPI.getYouTubeInfo(msg.data.url);
+                    const infoJson = JSON.stringify(info).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+                    tab.webview.executeJavaScript(`(function(){ sessionStorage.setItem('proton_info_response', \`${infoJson}\`); })();`).catch(() => {});
+                } catch (err) {
+                    const errJson = JSON.stringify({ success: false, error: err.message });
+                    tab.webview.executeJavaScript(`sessionStorage.setItem('proton_info_response', '${errJson.replace(/'/g, "\\'")}');`).catch(() => {});
                 }
-
-                if (msg.type === 'download') {
-                    self.handleYouTubeDownloadFromPage(msg.data);
-                }
-
-                if (msg.type === 'openFolder') {
-                    // Open the Downloads folder or specific file location
-                    if (window.electronAPI && window.electronAPI.openDownloadsFolder) {
-                        window.electronAPI.openDownloadsFolder();
-                    }
-                }
-
-                if (msg.type === 'grammar') {
-                    self.handleGrammarRequest(webview, msg.data);
-                }
-            }).catch(() => {});
+            } else if (msg.type === 'download') {
+                self.handleYouTubeDownloadFromPage(msg.data);
+            } else if (msg.type === 'openFolder') {
+                if (window.electronAPI && window.electronAPI.openDownloadsFolder) window.electronAPI.openDownloadsFolder();
+            } else if (msg.type === 'grammar') {
+                self.handleGrammarRequest(tab.webview, msg.data);
+            }
         }, 400);
+    }
 
-        tab.webview = webview;
-        webviewContainer.appendChild(webview);
+    // Report layout to main: the content-top offset (tab-strip + navbar, +embed
+    // toolbar) and whether an overlay is open. Main sizes the chrome view
+    // (collapsed vs expanded) and the active tab view from these values, so we
+    // don't measure the (possibly clipped) container here.
+    _pushLayout() {
+        if (!window.electronAPI?.ui) return;
+        const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+        const embedActive = activeTab && activeTab.type === 'embed';
+        const blankWeb = activeTab && activeTab.type === 'web' && !activeTab.url;
+        const contentTop = embedActive ? 136 : 98;
+        // Embed tabs keep the chrome expanded so #webview-container measures full
+        // size (the native embedded window is positioned from it) and the embed
+        // toolbar is visible; the native child window renders on top regardless.
+        const expanded = !activeTab || blankWeb || embedActive || this._anyOverlayOpen();
+        window.electronAPI.ui.layout({ contentTop, expanded });
+    }
+
+    _anyOverlayOpen() {
+        const shown = (el) => {
+            if (!el || el.classList.contains('hidden')) return false;
+            return getComputedStyle(el).display !== 'none';
+        };
+        const displayIds = ['main-menu', 'settings-panel', 'vpn-panel', 'lan-panel',
+            'bookmarks-panel', 'downloads-panel', 'history-panel', 'find-bar', 'zoom-controls',
+            'youtube-modal', 'torrent-modal', 'shortcuts-panel'];
+        if (displayIds.some(id => shown(document.getElementById(id)))) return true;
+        // .open-class overlays
+        if (['window-picker-modal', 'launch-loader'].some(id => {
+            const el = document.getElementById(id); return el && el.classList.contains('open');
+        })) return true;
+        // update notification (visible unless .hidden)
+        const upd = document.getElementById('update-notification');
+        if (upd && !upd.classList.contains('hidden') && getComputedStyle(upd).display !== 'none') return true;
+        // dynamically-created toasts
+        if (document.querySelector('.grammar-toast, .qx-toast, .toast, .notification-toast')) return true;
+        return false;
+    }
+
+    // Watch overlay elements so the chrome view expands the instant one opens and
+    // collapses when the last one closes (no per-call-site hooks needed).
+    _watchOverlays() {
+        if (this._overlaysWatched) return;
+        this._overlaysWatched = true;
+        const push = () => this._pushLayout();
+        const mo = new MutationObserver(push);
+        const ids = ['main-menu', 'settings-panel', 'vpn-panel', 'lan-panel', 'bookmarks-panel',
+            'downloads-panel', 'history-panel', 'find-bar', 'zoom-controls', 'youtube-modal',
+            'torrent-modal', 'shortcuts-panel', 'window-picker-modal', 'launch-loader',
+            'welcome-screen', 'update-notification', 'embed-toolbar'];
+        ids.forEach(id => { const el = document.getElementById(id); if (el) mo.observe(el, { attributes: true, attributeFilter: ['style', 'class'] }); });
+        if (document.body) mo.observe(document.body, { childList: true });
+        window.addEventListener('resize', push);
     }
 
     async handleGrammarRequest(webview, data) {
@@ -1784,17 +1892,15 @@ class TabManager {
         })();`).catch(() => {});
     }
 
-    async injectAdBlocker(webview) {
+    async injectAdBlocker(webview, url) {
         try {
-            const url = webview.getURL();
             if (!url || !url.includes('youtube.com')) return;
             const script = await window.electronAPI.getAdBlockScript();
             if (script) webview.executeJavaScript(script).catch(() => {});
         } catch (e) {}
     }
 
-    injectYouTubeDownloader(webview, tabId) {
-        const url = webview.getURL();
+    injectYouTubeDownloader(webview, tabId, url) {
         if (!url || (!url.includes('youtube.com/watch') && !url.includes('youtu.be/'))) return;
 
         const script = `
@@ -2363,11 +2469,14 @@ class TabManager {
     }
 
     switchTab(tabId) {
-        // Hide all tab elements and webviews
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.webview, .embed-placeholder').forEach(w => w.classList.remove('active'));
+        const tab = this.tabs.find(t => t.id === tabId);
+        if (!tab) return;
 
-        // Hide all currently visible embedded windows
+        // Tab-strip active state
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.embed-placeholder').forEach(w => w.classList.remove('active'));
+
+        // Hide all currently visible embedded windows (except the one we show)
         if (window.electronAPI?.showEmbedWindow) {
             this.tabs.forEach(t => {
                 if (t.type === 'embed' && t.embedHwnd && t.id !== tabId) {
@@ -2376,43 +2485,49 @@ class TabManager {
             });
         }
 
-        // Show active tab
         const tabElement = document.getElementById(`tab-element-${tabId}`);
-        const el = document.getElementById(`webview-${tabId}`);
+        if (tabElement) tabElement.classList.add('active');
+        this.activeTabId = tabId;
 
-        if (tabElement && el) {
-            tabElement.classList.add('active');
-            el.classList.add('active');
-            this.activeTabId = tabId;
+        const welcome = document.getElementById('welcome-screen');
+        const addressBar = document.getElementById('address-bar');
+        const toolbar = document.getElementById('embed-toolbar');
 
-            const tab = this.tabs.find(t => t.id === tabId);
-            const toolbar = document.getElementById('embed-toolbar');
-            if (tab) {
-                if (tab.type === 'embed') {
-                    document.getElementById('address-bar').value = '';
-                    document.getElementById('welcome-screen').style.display = 'none';
-                    if (toolbar) { this._updateEmbedToolbar(tab); toolbar.style.display = 'flex'; }
-                    // Show + position the embedded window
-                    if (window.electronAPI?.showEmbedWindow && tab.embedHwnd) {
-                        const b = this._containerBounds();
-                        window.electronAPI.moveEmbedWindow({ hwnd: tab.embedHwnd, ...b });
-                        window.electronAPI.showEmbedWindow({ hwnd: tab.embedHwnd, show: true });
-                    }
-                } else {
-                    if (toolbar) toolbar.style.display = 'none';
-                    document.getElementById('address-bar').value = tab.url;
-                    if (tab.url) {
-                        document.getElementById('welcome-screen').style.display = 'none';
-                    } else {
-                        document.getElementById('welcome-screen').style.display = 'flex';
-                    }
-                }
+        if (tab.type === 'embed') {
+            // Embed tab: hide all web views, show the native embedded window.
+            if (window.electronAPI?.tab) window.electronAPI.tab.hideAll();
+            const el = document.getElementById(`webview-${tabId}`);
+            if (el) el.classList.add('active');
+            if (addressBar) addressBar.value = '';
+            if (welcome) welcome.style.display = 'none';
+            if (toolbar) { this._updateEmbedToolbar(tab); toolbar.style.display = 'flex'; }
+            if (window.electronAPI?.showEmbedWindow && tab.embedHwnd) {
+                const b = this._containerBounds();
+                window.electronAPI.moveEmbedWindow({ hwnd: tab.embedHwnd, ...b });
+                window.electronAPI.showEmbedWindow({ hwnd: tab.embedHwnd, show: true });
+            }
+        } else {
+            // Web tab: show its WebContentsView, or the welcome screen if blank.
+            if (toolbar) toolbar.style.display = 'none';
+            if (addressBar) addressBar.value = tab.url || '';
+            if (tab.url) {
+                if (window.electronAPI?.tab) window.electronAPI.tab.activate(tabId);
+                this._pushLayout();
+                if (welcome) welcome.style.display = 'none';
+            } else {
+                if (window.electronAPI?.tab) window.electronAPI.tab.hideAll();
+                if (welcome) welcome.style.display = 'flex';
             }
         }
     }
 
+    // Physical-pixel content-area bounds for the native window-embed feature.
+    // Prefer main's value (the chrome view may be collapsed, so the renderer
+    // can't measure the real content area); fall back to DOM measurement.
     _containerBounds() {
+        if (this._contentBoundsPhysical) return this._contentBoundsPhysical;
         const el = document.getElementById('webview-container');
+        if (!el) return { x: 0, y: 0, w: 0, h: 0 };
         const r = el.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         return {
@@ -2421,6 +2536,19 @@ class TabManager {
             w: Math.round(r.width * dpr),
             h: Math.round(r.height * dpr)
         };
+    }
+
+    // Cache physical content-area bounds from main; reposition the active embed
+    // window when they change (window resize, chrome expand/collapse).
+    _watchContentBounds() {
+        if (!window.electronAPI?.ui?.onContentBounds) return;
+        window.electronAPI.ui.onContentBounds((d) => {
+            this._contentBoundsPhysical = d;
+            const t = this.tabs.find(x => x.id === this.activeTabId);
+            if (t && t.type === 'embed' && t.embedHwnd && window.electronAPI?.moveEmbedWindow) {
+                window.electronAPI.moveEmbedWindow({ hwnd: t.embedHwnd, ...d });
+            }
+        });
     }
 
     closeTab(tabId) {
@@ -2440,7 +2568,12 @@ class TabManager {
             }
         }
 
-        // Remove tab and webview
+        // Destroy the main-process WebContentsView for web tabs.
+        if (tab.type === 'web' && window.electronAPI?.tab) {
+            window.electronAPI.tab.close(tabId);
+        }
+
+        // Remove tab strip element (and the embed placeholder div, if any).
         const tabElement = document.getElementById(`tab-element-${tabId}`);
         const webview = document.getElementById(`webview-${tabId}`);
 
@@ -2468,8 +2601,10 @@ class TabManager {
         const url = this.formatUrl(input);
         tab.url = url;
 
-        if (tab.webview) {
-            tab.webview.src = url;
+        if (tab.type === 'web' && window.electronAPI?.tab) {
+            window.electronAPI.tab.navigate(tab.id, url);
+            window.electronAPI.tab.activate(tab.id);
+            this._pushLayout();
             document.getElementById('welcome-screen').style.display = 'none';
         }
 
@@ -2550,23 +2685,17 @@ class TabManager {
 
     goBack() {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
-        if (tab && tab.webview && tab.webview.canGoBack()) {
-            tab.webview.goBack();
-        }
+        if (tab && tab.type === 'web' && window.electronAPI?.tab) window.electronAPI.tab.back(tab.id);
     }
 
     goForward() {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
-        if (tab && tab.webview && tab.webview.canGoForward()) {
-            tab.webview.goForward();
-        }
+        if (tab && tab.type === 'web' && window.electronAPI?.tab) window.electronAPI.tab.forward(tab.id);
     }
 
     reload() {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
-        if (tab && tab.webview) {
-            tab.webview.reload();
-        }
+        if (tab && tab.type === 'web' && window.electronAPI?.tab) window.electronAPI.tab.reload(tab.id);
     }
 
     goHome() {
@@ -2951,23 +3080,23 @@ class TabManager {
     }
 
     _grammarEnableAllWebviews() {
-        // Inject into every open webview
-        document.querySelectorAll('.webview').forEach(wv => {
+        // Inject into every open web tab (WebContentsView shims)
+        this.tabs.filter(t => t.type === 'web' && t.webview).forEach(t => {
             try {
                 // First try to re-enable if already injected
-                wv.executeJavaScript(
+                t.webview.executeJavaScript(
                     'window.__proton_grammar_enable && window.__proton_grammar_enable();'
                 ).catch(() => {});
                 // Then do a full inject (idempotent — guarded by __proton_grammar_v8__)
-                this.injectGrammarAssistant(wv);
+                this.injectGrammarAssistant(t.webview);
             } catch(e){}
         });
     }
 
     _grammarDisableAllWebviews() {
-        document.querySelectorAll('.webview').forEach(wv => {
+        this.tabs.filter(t => t.type === 'web' && t.webview).forEach(t => {
             try {
-                wv.executeJavaScript(
+                t.webview.executeJavaScript(
                     'window.__proton_grammar_disable && window.__proton_grammar_disable();'
                 ).catch(() => {});
             } catch(e){}
@@ -3240,6 +3369,47 @@ class TabManager {
         }
     }
 
+    async triggerPiP() {
+        const tab = this.tabs.find(t => t.id === this.activeTabId);
+        if (!tab || tab.type !== 'web') {
+            this.showNotification('Picture in Picture', 'Switch to a web tab first.');
+            return;
+        }
+        const webview = tab.webview;
+        if (!webview) return;
+
+        try {
+            // Snapshot existing windows BEFORE opening PiP so we can detect the new one
+            await window.electronAPI?.prePipSnapshot?.();
+
+            const result = await webview.executeJavaScript(`(function(){
+                var vids = Array.from(document.querySelectorAll('video'));
+                if (!vids.length) return 'no-video';
+                var playing = vids.find(function(v){ return !v.paused && !v.ended && v.readyState > 2 && v.duration > 0; });
+                var target = playing || vids.reduce(function(b, v){ return (v.videoWidth * v.videoHeight) > ((b.videoWidth||0)*(b.videoHeight||0)) ? v : b; }, vids[0]);
+                if (!document.pictureInPictureEnabled) return 'unsupported';
+                if (document.pictureInPictureElement === target){ document.exitPictureInPicture(); return 'exit'; }
+                target.requestPictureInPicture();
+                return 'ok';
+            })()`);
+
+            const pipBtn = document.getElementById('pip-btn');
+            if (result === 'ok') {
+                if (pipBtn) pipBtn.classList.add('pip-active');
+                // Fallback: protect any window that appeared since the snapshot
+                window.electronAPI?.postPipProtect?.();
+            } else if (result === 'exit') {
+                if (pipBtn) pipBtn.classList.remove('pip-active');
+            } else if (result === 'no-video') {
+                this.showNotification('Picture in Picture', 'No video found on this page.');
+            } else if (result === 'unsupported') {
+                this.showNotification('Picture in Picture', 'PiP not supported on this page.');
+            }
+        } catch (e) {
+            this.showNotification('Picture in Picture', 'Could not activate PiP.');
+        }
+    }
+
     _updateEmbedToolbar(tab) {
         const titleEl = document.getElementById('embed-toolbar-title');
         const iconEl  = document.getElementById('embed-toolbar-icon');
@@ -3406,25 +3576,11 @@ function setupWindowControls() {
 }
 
 function updateMaximizeIcon(isMaximized) {
+    // The maximize control is now a traffic-light dot (styled purely via CSS),
+    // so we only update its tooltip — never its innerHTML.
     const maximizeBtn = document.getElementById('maximize-btn');
     if (!maximizeBtn) return;
-
-    if (isMaximized) {
-        maximizeBtn.innerHTML = `
-            <svg width="12" height="12" viewBox="0 0 12 12">
-                <rect x="2" y="0" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                <rect x="0" y="2" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
-            </svg>
-        `;
-        maximizeBtn.title = 'Restore Down';
-    } else {
-        maximizeBtn.innerHTML = `
-            <svg width="12" height="12" viewBox="0 0 12 12">
-                <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/>
-            </svg>
-        `;
-        maximizeBtn.title = 'Maximize';
-    }
+    maximizeBtn.title = isMaximized ? 'Restore Down' : 'Maximize';
 }
 
 // Feature Managers
@@ -4292,12 +4448,12 @@ class DownloadManager {
                 switch (action) {
                     case 'open':
                         if (download.filePath) {
-                            require('electron').shell.openPath(download.filePath);
+                            window.electronAPI.openPath(download.filePath);
                         }
                         break;
                     case 'show':
                         if (download.filePath) {
-                            require('electron').shell.showItemInFolder(download.filePath);
+                            window.electronAPI.showItemInFolder(download.filePath);
                         }
                         break;
                     case 'retry':
@@ -4645,6 +4801,13 @@ function setupKeyboardShortcuts() {
             window.tabManager.goForward();
         }
 
+        // Alt+P - Picture in Picture
+        if (e.altKey && e.key === 'p') {
+            e.preventDefault();
+            if (window.tabManager) window.tabManager.triggerPiP();
+            return;
+        }
+
         // Ctrl+Shift+? - Show Shortcuts
         if (ctrl && shift && e.key === '?') {
             e.preventDefault();
@@ -4685,6 +4848,9 @@ function closeAllPanels() {
     document.getElementById('shortcuts-panel').style.display = 'none';
     document.getElementById('settings-panel').style.display = 'none';
     document.getElementById('vpn-panel').style.display = 'none';
+    const lanPanel = document.getElementById('lan-panel');
+    if (lanPanel) lanPanel.style.display = 'none';
+    if (window.lanManager) window.lanManager.isOpen = false;
 }
 
 // Close modal/panel overlays on click
@@ -4852,6 +5018,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.downloadManager = new DownloadManager();
     window.vpnManager = new VPNManager();
     window.updateManager = new UpdateManager();
+    window.lanManager = new LANManager();
     
     setupWindowControls();
     setupKeyboardShortcuts();
@@ -4865,4 +5032,477 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('%c📥 Download YouTube videos, torrents & more! (Ctrl+J)', 'color: #fbbf24; font-size: 12px;');
     console.log('Third-party apps cannot capture this browser window.');
 });
+
+// ── LAN Office Chat & File Sharing Manager ──────────────────────────────────
+class LANManager {
+    constructor() {
+        this.isOpen = false;
+        this.unreadMessages = 0;
+        this.myIp = '127.0.0.1';
+        this.myPort = 55055;
+        this.myUsername = 'Colleague';
+        this.activeTab = 'chat';
+        this.init();
+    }
+
+    async init() {
+        if (!window.electronAPI) return;
+
+        this.setupEventListeners();
+        await this.loadStatus();
+        await this.loadHistory();
+        this.listenForEvents();
+    }
+
+    setupEventListeners() {
+        document.getElementById('lan-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggle();
+        });
+        document.getElementById('lan-close')?.addEventListener('click', () => this.close());
+
+        document.getElementById('lan-username-save-btn')?.addEventListener('click', () => this.saveUsername());
+        document.getElementById('lan-username-input')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.saveUsername();
+        });
+
+        document.querySelectorAll('.lan-tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tab = e.target.getAttribute('data-tab');
+                this.switchTab(tab);
+            });
+        });
+
+        document.getElementById('lan-send-btn')?.addEventListener('click', () => this.sendMessage());
+        document.getElementById('lan-message-input')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        });
+
+        document.getElementById('lan-attach-btn')?.addEventListener('click', () => this.shareFile());
+
+        document.getElementById('lan-manual-connect')?.addEventListener('click', () => this.addPeerManual());
+        document.getElementById('lan-manual-ip')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addPeerManual();
+        });
+        
+        // Prevent closing panel when clicking inside it
+        document.getElementById('lan-panel')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+
+    async loadStatus() {
+        try {
+            const status = await window.electronAPI.lanGetStatus();
+            this.myUsername = status.username;
+            this.myIp = status.ip;
+            this.myPort = status.port;
+
+            const nameEl = document.getElementById('lan-status-username');
+            if (nameEl) nameEl.textContent = this.myUsername;
+
+            const ipEl = document.getElementById('lan-status-ip');
+            if (ipEl) ipEl.textContent = `${this.myIp}:${this.myPort}`;
+
+            const inputEl = document.getElementById('lan-username-input');
+            if (inputEl) inputEl.value = this.myUsername;
+        } catch (e) {
+            console.error('[LAN] Error loading status:', e);
+        }
+    }
+
+    async loadHistory() {
+        try {
+            const history = await window.electronAPI.lanGetHistory();
+            const listEl = document.getElementById('lan-messages-list');
+            if (!listEl) return;
+
+            listEl.innerHTML = '';
+            history.forEach(msg => this.appendMessage(msg));
+            this.scrollToBottom();
+            
+            this.rebuildFilesList(history);
+        } catch (e) {
+            console.error('[LAN] Error loading history:', e);
+        }
+    }
+
+    listenForEvents() {
+        window.electronAPI.onLanMessage((msg) => {
+            this.appendMessage(msg);
+            
+            if (this.activeTab === 'chat') {
+                this.scrollToBottom();
+            }
+
+            if (!this.isOpen) {
+                this.unreadMessages++;
+                this.updateUnreadBadge();
+                this.showNotification(`New message from ${msg.sender}`, msg.message || 'Shared a file');
+            }
+
+            if (msg.file) {
+                this.addFileToList(msg);
+            }
+        });
+
+        window.electronAPI.onLanPeersChanged((peers) => {
+            this.updatePeersList(peers);
+        });
+    }
+
+    toggle() {
+        if (this.isOpen) {
+            this.close();
+        } else {
+            this.open();
+        }
+    }
+
+    open() {
+        closeAllPanels();
+        
+        document.getElementById('lan-panel').style.display = 'flex';
+        this.isOpen = true;
+        this.unreadMessages = 0;
+        this.updateUnreadBadge();
+        this.scrollToBottom();
+        
+        this.loadStatus();
+        window.electronAPI.lanGetPeers().then(peers => this.updatePeersList(peers));
+    }
+
+    close() {
+        document.getElementById('lan-panel').style.display = 'none';
+        this.isOpen = false;
+    }
+
+    switchTab(tab) {
+        this.activeTab = tab;
+        
+        document.querySelectorAll('.lan-tab-btn').forEach(btn => {
+            if (btn.getAttribute('data-tab') === tab) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        if (tab === 'chat') {
+            document.getElementById('lan-view-chat').style.display = 'flex';
+            document.getElementById('lan-view-files').style.display = 'none';
+            this.scrollToBottom();
+        } else {
+            document.getElementById('lan-view-chat').style.display = 'none';
+            document.getElementById('lan-view-files').style.display = 'block';
+        }
+    }
+
+    async saveUsername() {
+        const input = document.getElementById('lan-username-input');
+        if (!input) return;
+
+        const name = input.value.trim();
+        if (!name) return;
+
+        try {
+            const res = await window.electronAPI.lanSetUsername(name);
+            if (res.success) {
+                this.myUsername = res.username;
+                document.getElementById('lan-status-username').textContent = this.myUsername;
+                this.appendSystemMessage(`You changed display name to "${this.myUsername}"`);
+                this.scrollToBottom();
+            } else {
+                alert(res.error || 'Failed to save username');
+            }
+        } catch (e) {
+            console.error('[LAN] Error saving username:', e);
+        }
+    }
+
+    async sendMessage() {
+        const input = document.getElementById('lan-message-input');
+        if (!input) return;
+
+        const msg = input.value.trim();
+        if (!msg) return;
+
+        input.value = '';
+
+        try {
+            const res = await window.electronAPI.lanSendMessage(msg);
+            if (!res.success) {
+                console.error('[LAN] Error sending message:', res.error);
+            }
+        } catch (e) {
+            console.error('[LAN] Error invoking send message:', e);
+        }
+    }
+
+    async shareFile() {
+        try {
+            const res = await window.electronAPI.lanShareFile();
+            if (res.success) {
+                // Sent
+            } else if (!res.canceled) {
+                alert(res.error || 'Failed to share file');
+            }
+        } catch (e) {
+            console.error('[LAN] Error sharing file:', e);
+        }
+    }
+
+    async addPeerManual() {
+        const input = document.getElementById('lan-manual-ip');
+        if (!input) return;
+
+        const ip = input.value.trim();
+        if (!ip) return;
+
+        input.value = '';
+
+        try {
+            const res = await window.electronAPI.lanAddPeerManual(ip);
+            if (res.success) {
+                this.appendSystemMessage(`Searching for peer at ${ip}...`);
+                this.scrollToBottom();
+            } else {
+                alert(res.error || 'Failed to add peer');
+            }
+        } catch (e) {
+            console.error('[LAN] Error adding manual peer:', e);
+        }
+    }
+
+    appendMessage(msg) {
+        const listEl = document.getElementById('lan-messages-list');
+        if (!listEl) return;
+
+        const isOutgoing = msg.senderIp === this.myIp;
+        
+        const msgEl = document.createElement('div');
+        msgEl.className = `lan-message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+        
+        let senderHtml = '';
+        if (!isOutgoing) {
+            senderHtml = `<div class="lan-message-sender">${this.escapeHtml(msg.sender)}</div>`;
+        }
+
+        let messageTextHtml = '';
+        if (msg.message && !msg.file) {
+            messageTextHtml = `<div>${this.escapeHtml(msg.message)}</div>`;
+        }
+
+        let fileAttachmentHtml = '';
+        if (msg.file) {
+            const sizeStr = this.formatBytes(msg.file.size);
+            fileAttachmentHtml = `
+                <div class="lan-file-attachment">
+                    <span class="lan-file-icon">📁</span>
+                    <div class="lan-file-info">
+                        <span class="lan-file-name" title="${this.escapeHtml(msg.file.name)}">${this.escapeHtml(msg.file.name)}</span>
+                        <span class="lan-file-size" style="color: rgba(255,255,255,0.7);">${sizeStr}</span>
+                    </div>
+                    <button class="lan-file-btn" onclick="window.lanManager.downloadFile('${msg.file.url}', '${this.escapeHtml(msg.file.name)}')">
+                        Download
+                    </button>
+                </div>
+            `;
+        }
+
+        const timeStr = this.formatTime(msg.timestamp);
+
+        msgEl.innerHTML = `
+            ${senderHtml}
+            ${messageTextHtml}
+            ${fileAttachmentHtml}
+            <div class="lan-message-time">${timeStr}</div>
+        `;
+
+        listEl.appendChild(msgEl);
+    }
+
+    appendSystemMessage(text) {
+        const listEl = document.getElementById('lan-messages-list');
+        if (!listEl) return;
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'lan-message-system';
+        msgEl.textContent = text;
+        
+        listEl.appendChild(msgEl);
+    }
+
+    downloadFile(url, filename) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        this.showNotification('Download Started', `Downloading ${filename} from LAN...`);
+    }
+
+    updateUnreadBadge() {
+        const badge = document.getElementById('lan-unread-badge');
+        if (!badge) return;
+
+        if (this.unreadMessages > 0) {
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    updatePeersList(peers) {
+        const listEl = document.getElementById('lan-peers-list');
+        const countEl = document.getElementById('lan-peers-count');
+        if (!listEl) return;
+
+        if (countEl) countEl.textContent = peers.length;
+
+        if (peers.length === 0) {
+            listEl.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); font-style: italic;">No colleagues online. Open QuantumX on another computer to connect.</div>`;
+            return;
+        }
+
+        listEl.innerHTML = '';
+        peers.forEach(peer => {
+            const card = document.createElement('div');
+            card.className = 'lan-peer-card';
+            
+            const initials = peer.username.substring(0, 2).toUpperCase();
+            
+            card.innerHTML = `
+                <div style="display: flex; align-items: center; flex: 1; overflow: hidden;">
+                    <div class="lan-peer-avatar">${initials}</div>
+                    <div class="lan-peer-name">
+                        <div style="font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${this.escapeHtml(peer.username)}</div>
+                        <div class="lan-peer-ip">${peer.ip}:${peer.httpPort}</div>
+                    </div>
+                </div>
+                <div class="lan-peer-status-dot"></div>
+            `;
+            listEl.appendChild(card);
+        });
+    }
+
+    rebuildFilesList(history) {
+        const listEl = document.getElementById('lan-files-list');
+        if (!listEl) return;
+
+        listEl.innerHTML = '';
+        const fileMessages = history.filter(msg => msg.file);
+
+        if (fileMessages.length === 0) {
+            listEl.innerHTML = `<div style="font-size: 11px; color: var(--text-secondary); font-style: italic; text-align: center; padding: 20px;">No files shared yet. Share a file in the chatroom!</div>`;
+            return;
+        }
+
+        const reversed = [...fileMessages].reverse();
+        reversed.forEach(msg => {
+            this.addFileToListView(msg, listEl);
+        });
+    }
+
+    addFileToList(msg) {
+        const listEl = document.getElementById('lan-files-list');
+        if (!listEl) return;
+
+        if (listEl.querySelector('div[style*="font-style: italic"]')) {
+            listEl.innerHTML = '';
+        }
+
+        this.addFileToListView(msg, listEl, true);
+    }
+
+    addFileToListView(msg, container, prepend = false) {
+        const sizeStr = this.formatBytes(msg.file.size);
+        const card = document.createElement('div');
+        card.className = 'lan-shared-file-card';
+        
+        card.innerHTML = `
+            <span style="font-size: 24px;">📁</span>
+            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <span style="font-weight: 600; font-size: 12px; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${this.escapeHtml(msg.file.name)}">${this.escapeHtml(msg.file.name)}</span>
+                <span style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">Shared by ${this.escapeHtml(msg.sender)} • ${sizeStr}</span>
+            </div>
+            <button class="lan-file-btn" onclick="window.lanManager.downloadFile('${msg.file.url}', '${this.escapeHtml(msg.file.name)}')">
+                Download
+            </button>
+        `;
+
+        if (prepend && container.firstChild) {
+            container.insertBefore(card, container.firstChild);
+        } else {
+            container.appendChild(card);
+        }
+    }
+
+    scrollToBottom() {
+        const listEl = document.getElementById('lan-messages-list');
+        if (listEl) {
+            setTimeout(() => {
+                listEl.scrollTop = listEl.scrollHeight;
+            }, 50);
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    formatBytes(bytes, decimals = 2) {
+        if (!+bytes) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    }
+
+    formatTime(timestamp) {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    showNotification(title, message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: linear-gradient(135deg, #1b1625 0%, #2e243a 100%);
+            color: #fafaf9;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 10000;
+            border: 1px solid #a855f7;
+            max-width: 320px;
+            animation: slideIn 0.3s ease;
+        `;
+        
+        notification.innerHTML = `
+            <div style="font-weight: 700; margin-bottom: 4px; color: #a855f7;">${title}</div>
+            <div style="font-size: 13px; color: #d6d3d1; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${message}</div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    document.body.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+}
 

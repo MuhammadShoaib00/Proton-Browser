@@ -382,6 +382,42 @@ Napi::Value GetWindowProcessPath(const Napi::CallbackInfo& info) {
     return Napi::String::New(env, WideToUtf8(path.c_str()));
 }
 
+// ── Own-process window enumeration (for PiP security) ────────────────────────
+// EnumVisibleWindows() intentionally SKIPS windows that belong to our own process
+// (to hide QuantumX from the window-embed picker).  That exclusion also hides
+// Chromium's PiP overlay window, which is owned by our process but is NOT
+// tracked as an Electron BrowserWindow.  EnumOwnProcessWindows() returns ONLY
+// the windows that belong to our PID, with no title filter, so callers can
+// detect the new PiP HWND and apply SetWindowDisplayAffinity to it.
+
+struct OwnPidWindowData {
+    std::vector<uintptr_t>* hwnds;
+    DWORD pid;
+};
+
+static BOOL CALLBACK CollectOwnPidWindows(HWND hwnd, LPARAM lParam) {
+    auto* data = reinterpret_cast<OwnPidWindowData*>(lParam);
+    if (!IsWindowVisible(hwnd)) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != data->pid) return TRUE;
+    data->hwnds->push_back((uintptr_t)hwnd);
+    return TRUE;
+}
+
+// EnumOwnProcessWindows() → Array of HWND numbers (our process, no title filter)
+Napi::Value EnumOwnProcessWindows(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    std::vector<uintptr_t> hwnds;
+    OwnPidWindowData data = { &hwnds, GetCurrentProcessId() };
+    EnumWindows(CollectOwnPidWindows, (LPARAM)&data);
+    Napi::Array result = Napi::Array::New(env, hwnds.size());
+    for (size_t i = 0; i < hwnds.size(); i++) {
+        result[i] = Napi::Number::New(env, (double)hwnds[i]);
+    }
+    return result;
+}
+
 // GetWindowTitle(hwnd) → string
 Napi::Value GetWindowTitle(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
@@ -415,6 +451,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("getWindowTitle",         Napi::Function::New(env, GetWindowTitle));
     exports.Set("isWindowValid",          Napi::Function::New(env, IsWindowValid));
     exports.Set("getWindowProcessPath",   Napi::Function::New(env, GetWindowProcessPath));
+    exports.Set("enumOwnProcessWindows",  Napi::Function::New(env, EnumOwnProcessWindows));
     return exports;
 }
 

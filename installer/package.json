@@ -1,0 +1,52 @@
+{
+  "name": "quantumx-setup",
+  "version": "2.0.0",
+  "description": "QuantumX Setup",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "dist": "electron-builder --win"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.quantumx.setup",
+    "productName": "QuantumX Setup",
+    "copyright": "Copyright © 2025 QuantumX",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist/win-unpacked",
+        "to": "app-payload"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "../assets/logo.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "QuantumX-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "QuantumX-Setup-${version}.exe",
+      "unicode": true
+    }
+  }
+}

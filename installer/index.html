@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuantumX Setup</title>
+  <style>
+    :root {
+      --ac: #D4B36A;
+      --sans: 'Albert Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
+    [hidden] { display: none !important; }
+    @keyframes stepIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes glyphSpin { from { transform: rotate(45deg); } to { transform: rotate(405deg); } }
+    @keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+    @keyframes breathe { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+    @keyframes riseIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    .step { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: stepIn .55s cubic-bezier(.2,.7,.2,1) both; }
+    .btn-primary { border: none; cursor: pointer; font-family: var(--sans); font-weight: 600; text-transform: uppercase; color: #0B0C10;
+      background: linear-gradient(135deg, var(--ac), color-mix(in oklab, var(--ac) 75%, #7a5f2e)); transition: box-shadow .3s, transform .3s, opacity .3s; }
+    .btn-primary:hover { box-shadow: 0 10px 44px color-mix(in oklab, var(--ac) 50%, transparent); transform: translateY(-2px); }
+    .btn-ghost { cursor: pointer; background: transparent; border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.7);
+      font-family: var(--sans); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; transition: border-color .3s; }
+    .btn-ghost:hover { border-color: rgba(255,255,255,.4); }
+    .pref:hover { border-color: rgba(255,255,255,.2) !important; }
+    input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--ac); cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div style="--ac: #D4B36A; height: 100vh; width: 100%; display: block; font-family: var(--sans); background: transparent;">
+
+    <!-- Installer window (fills the frame edge-to-edge) -->
+    <div id="stage" style="position: relative; width: 100%; height: 100vh; overflow: hidden;
+      background: linear-gradient(175deg, #12141B, #0B0C11); display: flex; flex-direction: column;
+      transition: opacity .28s ease;">
+
+      <canvas id="particles" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+
+      <!-- title bar -->
+      <div style="position: relative; z-index: 2; height: 54px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+        padding: 0 22px; border-bottom: 1px solid rgba(255,255,255,.06); -webkit-app-region: drag;">
+        <div style="display: flex; gap: 8px; -webkit-app-region: no-drag;">
+          <span id="btnMin" title="Minimize" style="width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.14); cursor: pointer;"></span>
+          <span id="btnClose" title="Close" style="width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.09); cursor: pointer;"></span>
+        </div>
+        <div style="font-size: 12px; letter-spacing: .32em; text-transform: uppercase; color: rgba(255,255,255,.5);">QuantumX&nbsp;&nbsp;Setup</div>
+        <div id="verText" style="font-size: 12px; color: rgba(255,255,255,.3);">v2.0.0</div>
+      </div>
+
+      <!-- content -->
+      <div style="position: relative; z-index: 2; flex: 1; min-height: 0; display: flex; flex-direction: column;">
+
+        <!-- WELCOME -->
+        <section id="step-welcome" class="step" style="align-items: center; justify-content: center; text-align: center; padding: 40px;">
+          <div style="position: relative; width: 96px; height: 96px; display: grid; place-items: center; margin-bottom: 36px;">
+            <div style="position: absolute; inset: -28px; border-radius: 50%; background: radial-gradient(circle, color-mix(in oklab, var(--ac) 22%, transparent), transparent 70%); animation: breathe 4s ease-in-out infinite;"></div>
+            <div style="position: absolute; width: 76px; height: 76px; border: 1px solid color-mix(in oklab, var(--ac) 65%, transparent); transform: rotate(45deg); animation: glyphSpin 24s linear infinite;"></div>
+            <div style="position: absolute; width: 52px; height: 52px; border: 1px solid color-mix(in oklab, var(--ac) 40%, transparent); transform: rotate(45deg); animation: glyphSpin 24s linear infinite reverse;"></div>
+            <div style="width: 14px; height: 14px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 24px var(--ac);"></div>
+          </div>
+          <div style="font-family: var(--serif); font-weight: 500; font-size: 58px; color: #F4EFE4; letter-spacing: .04em; line-height: 1;">QuantumX</div>
+          <div style="margin-top: 16px; font-size: 15px; color: rgba(255,255,255,.55); max-width: 420px; line-height: 1.6;">Welcome. This assistant will guide you through the installation in a few elegant steps.</div>
+          <button id="btnBegin" class="btn-primary" style="margin-top: 44px; padding: 15px 46px; border-radius: 999px; font-size: 14px; letter-spacing: .14em; box-shadow: 0 8px 30px color-mix(in oklab, var(--ac) 25%, transparent);">Begin Installation</button>
+          <div id="sizeNote" style="margin-top: 20px; font-size: 12px; color: rgba(255,255,255,.28);">calculating size…</div>
+        </section>
+
+        <!-- LICENSE -->
+        <section id="step-license" class="step" hidden style="padding: 36px 64px 28px;">
+          <div style="font-family: var(--serif); font-size: 34px; color: #F4EFE4;">License Agreement</div>
+          <div style="margin-top: 6px; font-size: 13px; color: rgba(255,255,255,.45);">Please review the terms before continuing.</div>
+          <div style="flex: 1; min-height: 0; margin-top: 20px; overflow-y: auto; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); padding: 24px 28px; font-size: 13px; line-height: 1.75; color: rgba(255,255,255,.6);">
+            <p style="margin: 0 0 14px; color: rgba(255,255,255,.8); font-weight: 600;">QuantumX Software License</p>
+            <p style="margin: 0 0 14px;">This License Agreement is entered into between you and QuantumX Labs upon installation of the Software. By clicking "I agree", you accept these terms in full.</p>
+            <p style="margin: 0 0 14px;">1. Grant of License. QuantumX Labs grants you a personal, non-exclusive, non-transferable license to install and use the Software on devices you own or control.</p>
+            <p style="margin: 0 0 14px;">2. Restrictions. You may not copy, modify, distribute, sell, or lease any part of the Software, nor reverse engineer or attempt to extract its source code, except where such restrictions are prohibited by law.</p>
+            <p style="margin: 0 0 14px;">3. Updates. The Software may automatically download and install updates designed to improve, enhance, and further develop it.</p>
+            <p style="margin: 0 0 14px;">4. Privacy. Diagnostic data is collected only with your consent and handled in accordance with the QuantumX Privacy Policy.</p>
+            <p style="margin: 0 0 14px;">5. Warranty. The Software is provided "as is", without warranty of any kind, express or implied, including merchantability or fitness for a particular purpose.</p>
+            <p style="margin: 0;">6. Termination. This license is effective until terminated, and will terminate automatically if you fail to comply with any of its terms.</p>
+          </div>
+          <label style="display: flex; align-items: center; gap: 12px; margin-top: 18px; cursor: pointer; font-size: 14px; color: rgba(255,255,255,.75);">
+            <input type="checkbox" id="chkAgree"> I have read and agree to the license terms
+          </label>
+          <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-ghost" data-nav="welcome" style="padding: 13px 32px; border-radius: 999px; font-size: 13px;">Back</button>
+            <button id="licContinue" class="btn-primary" style="padding: 13px 40px; border-radius: 999px; font-size: 13px; letter-spacing: .12em; opacity: .35; cursor: not-allowed;">Continue</button>
+          </div>
+        </section>
+
+        <!-- LOCATION -->
+        <section id="step-location" class="step" hidden style="padding: 36px 64px 28px;">
+          <div style="font-family: var(--serif); font-size: 34px; color: #F4EFE4;">Destination &amp; Options</div>
+          <div style="margin-top: 6px; font-size: 13px; color: rgba(255,255,255,.45);">Choose where QuantumX lives and how it behaves.</div>
+
+          <div style="margin-top: 26px; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,.4);">Install location</div>
+          <div style="margin-top: 10px; display: flex; gap: 12px;">
+            <input id="pathInput" spellcheck="false" style="flex: 1; padding: 15px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.03); color: #F4EFE4; font-family: var(--sans); font-size: 14px; outline: none;">
+            <button id="btnBrowse" class="btn-ghost" style="padding: 0 22px; border-radius: 12px; text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 13px; color: rgba(255,255,255,.65);">Browse…</button>
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 14px;">
+            <div style="flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden;">
+              <div style="width: 34%; height: 100%; border-radius: 2px; background: linear-gradient(90deg, color-mix(in oklab, var(--ac) 60%, transparent), var(--ac));"></div>
+            </div>
+            <div id="diskText" style="font-size: 12px; color: rgba(255,255,255,.4); white-space: nowrap;">plenty of space free</div>
+          </div>
+
+          <div style="margin-top: 30px; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,.4);">Preferences</div>
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <label class="pref" style="display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); cursor: pointer; transition: border-color .3s;">
+              <span style="font-size: 14px; color: rgba(255,255,255,.8);">Create desktop shortcut</span>
+              <input type="checkbox" id="chkShortcut" checked>
+            </label>
+            <label class="pref" style="display: flex; align-items: center; justify-content: space-between; padding: 15px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); cursor: pointer; transition: border-color .3s;">
+              <span style="font-size: 14px; color: rgba(255,255,255,.8);">Launch at startup</span>
+              <input type="checkbox" id="chkLaunch">
+            </label>
+          </div>
+
+          <div style="flex: 1;"></div>
+          <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+            <button class="btn-ghost" data-nav="license" style="padding: 13px 32px; border-radius: 999px; font-size: 13px;">Back</button>
+            <button id="btnInstall" class="btn-primary" style="padding: 13px 40px; border-radius: 999px; font-size: 13px; letter-spacing: .12em;">Install</button>
+          </div>
+        </section>
+
+        <!-- PROGRESS -->
+        <section id="step-progress" class="step" hidden style="align-items: center; justify-content: center; padding: 40px 90px;">
+          <div style="font-size: 11px; letter-spacing: .32em; text-transform: uppercase; color: color-mix(in oklab, var(--ac) 80%, white); animation: breathe 2.4s ease-in-out infinite;">Installing</div>
+          <div id="pctText" style="margin-top: 12px; font-family: var(--serif); font-weight: 500; font-size: 120px; line-height: 1; color: #F4EFE4; font-variant-numeric: tabular-nums;">0%</div>
+          <div style="width: 100%; max-width: 560px; margin-top: 42px; height: 10px; border-radius: 999px; background: rgba(255,255,255,.06); overflow: visible; position: relative;">
+            <div id="bar" style="height: 100%; border-radius: 999px; width: 0%; background: linear-gradient(90deg, color-mix(in oklab, var(--ac) 55%, transparent), var(--ac) 60%, #fff2d0 85%, var(--ac)); background-size: 200% 100%; animation: shimmer 2.2s linear infinite; box-shadow: 0 0 22px color-mix(in oklab, var(--ac) 55%, transparent), 0 0 60px color-mix(in oklab, var(--ac) 25%, transparent); transition: width .25s ease-out;"></div>
+            <div id="barDot" style="position: absolute; top: 50%; left: 0%; transform: translate(-50%, -50%); width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle, #fff6dd, var(--ac) 55%, transparent 72%); box-shadow: 0 0 26px var(--ac); transition: left .25s ease-out;"></div>
+          </div>
+          <div style="margin-top: 28px; display: flex; align-items: baseline; gap: 18px; font-size: 13px;">
+            <span id="fileText" style="color: rgba(255,255,255,.55); font-family: ui-monospace, monospace;"></span>
+            <span id="speedText" style="color: rgba(255,255,255,.3);"></span>
+          </div>
+        </section>
+
+        <!-- SUCCESS -->
+        <section id="step-done" class="step" hidden style="align-items: center; justify-content: center; text-align: center; padding: 40px;">
+          <div style="position: relative; width: 92px; height: 92px; display: grid; place-items: center; animation: riseIn .7s cubic-bezier(.2,1.4,.3,1) both;">
+            <div style="position: absolute; inset: -30px; border-radius: 50%; background: radial-gradient(circle, color-mix(in oklab, var(--ac) 28%, transparent), transparent 70%); animation: breathe 3.5s ease-in-out infinite;"></div>
+            <div style="width: 92px; height: 92px; border-radius: 50%; border: 1px solid color-mix(in oklab, var(--ac) 70%, transparent); display: grid; place-items: center;">
+              <div style="width: 30px; height: 16px; border-left: 3px solid var(--ac); border-bottom: 3px solid var(--ac); transform: rotate(-45deg) translate(2px, -4px); filter: drop-shadow(0 0 10px var(--ac));"></div>
+            </div>
+          </div>
+          <div style="margin-top: 34px; font-family: var(--serif); font-size: 44px; color: #F4EFE4;">Installation complete</div>
+          <div style="margin-top: 12px; font-size: 14px; color: rgba(255,255,255,.5); max-width: 400px; line-height: 1.6;">QuantumX is ready. Thank you for choosing excellence.</div>
+          <label style="display: flex; align-items: center; gap: 12px; margin-top: 30px; cursor: pointer; font-size: 14px; color: rgba(255,255,255,.7);">
+            <input type="checkbox" id="chkLaunchAfter" checked> Launch QuantumX now
+          </label>
+          <button id="btnFinish" class="btn-primary" style="margin-top: 30px; padding: 15px 52px; border-radius: 999px; font-size: 14px; letter-spacing: .14em; box-shadow: 0 8px 30px color-mix(in oklab, var(--ac) 25%, transparent);">Finish</button>
+        </section>
+
+        <!-- step dots -->
+        <div id="dots" style="flex: 0 0 auto; display: flex; justify-content: center; gap: 10px; padding: 0 0 22px;">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <canvas id="confetti" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></canvas>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

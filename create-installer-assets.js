@@ -1,6 +1,10 @@
 /**
  * Generates BMP installer images for the NSIS installer.
- * Run automatically before build via the "prebuild:win" npm script.
+ * Run automatically before build via the "build" / "build:win" npm scripts.
+ *
+ * Visual language mirrors the "QuantumX Setup" design:
+ *   near-black background (#07080C / #0B0C11), gold accent (#D4B36A),
+ *   a nested-diamond glyph with a glowing core, and a serif wordmark.
  *
  * Outputs:
  *   assets/installer-sidebar.bmp  164×314 px  (Welcome / Finish pages)
@@ -10,6 +14,10 @@
 const sharp = require('sharp');
 const fs    = require('fs');
 const path  = require('path');
+
+const VERSION = (() => {
+  try { return require('./package.json').version || ''; } catch (_) { return ''; }
+})();
 
 // ── BMP writer ─────────────────────────────────────────────────────────────
 // Converts sharp raw() RGB(A) buffer → 24-bit Windows BMP (bottom-up, BGR)
@@ -56,33 +64,47 @@ async function svgToBMP(svgStr, w, h, bgColor) {
   return rawToBMP(data, w, h, info.channels);
 }
 
+// Shared defs (gradients + soft-glow filter) used by both bitmaps.
+// Uses only plain hex/rgba — librsvg (via sharp) does not support color-mix/oklab.
+const DEFS = `
+  <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%"   stop-color="#FFF2D0"/>
+    <stop offset="45%"  stop-color="#D4B36A"/>
+    <stop offset="100%" stop-color="#7A5F2E"/>
+  </linearGradient>
+  <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+    <stop offset="0%"   stop-color="#FFF6DD"/>
+    <stop offset="40%"  stop-color="#D4B36A" stop-opacity="0.8"/>
+    <stop offset="100%" stop-color="#8A733F" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="soft" x="-80%" y="-80%" width="260%" height="260%" color-interpolation-filters="sRGB">
+    <feGaussianBlur stdDeviation="5"/>
+  </filter>`;
+
 // ── Sidebar 164×314 (Welcome + Finish pages) ──────────────────────────────
 async function buildSidebar() {
   const W = 164, H = 314;
+  const cx = 82, cy = 106; // glyph centre
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
+    ${DEFS}
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#04090f"/>
-      <stop offset="100%" stop-color="#0b1e3d"/>
+      <stop offset="0%"   stop-color="#0B0C11"/>
+      <stop offset="100%" stop-color="#07080C"/>
     </linearGradient>
-    <radialGradient id="topGlow" cx="55%" cy="0%" r="60%">
-      <stop offset="0%"   stop-color="#1d4ed8" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#04090f" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%"   stop-color="#3b82f6" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    <radialGradient id="topGlow" cx="50%" cy="0%" r="72%">
+      <stop offset="0%"   stop-color="#D4B36A" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#07080C" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="accentBar" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%"   stop-color="#93c5fd"/>
-      <stop offset="60%"  stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
+      <stop offset="0%"   stop-color="#FFF2D0"/>
+      <stop offset="55%"  stop-color="#D4B36A"/>
+      <stop offset="100%" stop-color="#7A5F2E"/>
     </linearGradient>
     <linearGradient id="divider" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#3b82f6" stop-opacity="0"/>
-      <stop offset="30%"  stop-color="#3b82f6" stop-opacity="0.7"/>
-      <stop offset="70%"  stop-color="#3b82f6" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+      <stop offset="0%"   stop-color="#D4B36A" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#D4B36A" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#D4B36A" stop-opacity="0"/>
     </linearGradient>
   </defs>
 
@@ -93,124 +115,120 @@ async function buildSidebar() {
   <!-- Left accent bar -->
   <rect x="0" y="0" width="3" height="${H}" fill="url(#accentBar)"/>
 
-  <!-- Orbital rings -->
-  <ellipse cx="92" cy="112" rx="54" ry="21" fill="none" stroke="#3b82f6"  stroke-width="1.4" opacity="0.5"/>
-  <ellipse cx="92" cy="112" rx="54" ry="21" fill="none" stroke="#60a5fa"  stroke-width="1"   opacity="0.32" transform="rotate(60 92 112)"/>
-  <ellipse cx="92" cy="112" rx="54" ry="21" fill="none" stroke="#93c5fd"  stroke-width="0.8" opacity="0.2"  transform="rotate(120 92 112)"/>
+  <!-- Faint particle field -->
+  <g fill="#D4B36A" opacity="0.55">
+    <circle cx="34"  cy="52"  r="1.2"/>
+    <circle cx="132" cy="46"  r="1.0"/>
+    <circle cx="140" cy="150" r="1.3"/>
+    <circle cx="28"  cy="150" r="1.1"/>
+  </g>
 
-  <!-- Core glow halo -->
-  <circle cx="92" cy="112" r="40" fill="url(#coreGlow)"/>
+  <!-- Nested-diamond glyph -->
+  <g transform="rotate(45 ${cx} ${cy})" fill="none">
+    <rect x="${cx-37}" y="${cy-37}" width="74" height="74" rx="10" stroke="#D4B36A" stroke-width="8" opacity="0.16" filter="url(#soft)"/>
+    <rect x="${cx-37}" y="${cy-37}" width="74" height="74" rx="10" stroke="url(#edge)" stroke-width="3.2"/>
+    <rect x="${cx-25}" y="${cy-25}" width="50" height="50" rx="8"  stroke="#D4B36A" stroke-width="2.2" opacity="0.6"/>
+    <rect x="${cx-14}" y="${cy-14}" width="28" height="28" rx="6"  stroke="#D4B36A" stroke-width="1.6" opacity="0.4"/>
+  </g>
 
-  <!-- Core circles -->
-  <circle cx="92" cy="112" r="32" fill="#07152b" stroke="#2563eb" stroke-width="2.2"/>
-  <circle cx="92" cy="112" r="23" fill="#0e2a56"/>
-  <circle cx="92" cy="112" r="14" fill="#173d78" opacity="0.85"/>
+  <!-- Core -->
+  <circle cx="${cx}" cy="${cy}" r="26" fill="url(#coreGlow)" filter="url(#soft)"/>
+  <circle cx="${cx}" cy="${cy}" r="7.5" fill="#FFF6DD"/>
+  <circle cx="${cx}" cy="${cy}" r="4.5" fill="#FFFFFF"/>
 
-  <!-- Inner shine -->
-  <circle cx="83" cy="103" r="4" fill="white" opacity="0.12"/>
-
-  <!-- Letter P (centred in core) -->
-  <text x="84"
-        y="121"
+  <!-- Wordmark -->
+  <text x="${cx}" y="182"
         font-family="Georgia,'Times New Roman',serif"
-        font-size="26"
-        font-weight="bold"
-        fill="#f0f8ff"
-        opacity="0.97">P</text>
+        font-size="27"
+        fill="#F4EFE4"
+        text-anchor="middle">QuantumX</text>
 
-  <!-- Orbital particles -->
-  <circle cx="146" cy="112" r="5"   fill="#60a5fa" opacity="0.85"/>
-  <circle cx="40"  cy="112" r="3.5" fill="#93c5fd" opacity="0.65"/>
-  <circle cx="92"  cy="81"  r="4"   fill="#60a5fa" opacity="0.7"/>
-  <circle cx="92"  cy="143" r="3"   fill="#93c5fd" opacity="0.55"/>
-
-  <!-- App name -->
-  <text x="92" y="177"
+  <text x="${cx}" y="201"
         font-family="Arial,Helvetica,sans-serif"
-        font-size="16"
-        font-weight="bold"
-        fill="#dbeafe"
+        font-size="9.5"
+        font-weight="600"
+        fill="#D4B36A"
         text-anchor="middle"
-        letter-spacing="2">PROTON</text>
-
-  <text x="92" y="195"
-        font-family="Arial,Helvetica,sans-serif"
-        font-size="10.5"
-        fill="#60a5fa"
-        text-anchor="middle"
-        letter-spacing="4">BROWSER</text>
+        letter-spacing="6">SETUP</text>
 
   <!-- Divider -->
-  <rect x="30" y="205" width="124" height="1" fill="url(#divider)"/>
+  <rect x="30" y="211" width="104" height="1" fill="url(#divider)"/>
 
   <!-- Tagline -->
-  <text x="92" y="221"
+  <text x="${cx}" y="227"
         font-family="Arial,Helvetica,sans-serif"
         font-size="8"
-        fill="#6da4d4"
-        text-anchor="middle">Secure  ·  Fast  ·  Private</text>
+        fill="#9C8A63"
+        text-anchor="middle"
+        letter-spacing="1">Secure  ·  Private  ·  Fast</text>
 
-  <!-- Bottom feature dots -->
-  <circle cx="67"  cy="275" r="2"   fill="#1d4ed8" opacity="0.55"/>
-  <circle cx="78"  cy="275" r="2.5" fill="#3b82f6" opacity="0.7"/>
-  <circle cx="92"  cy="275" r="3.5" fill="#60a5fa" opacity="0.85"/>
-  <circle cx="106" cy="275" r="2.5" fill="#3b82f6" opacity="0.7"/>
-  <circle cx="117" cy="275" r="2"   fill="#1d4ed8" opacity="0.55"/>
+  <!-- Bottom accent dots -->
+  <circle cx="62"  cy="276" r="1.8" fill="#7A5F2E"/>
+  <circle cx="74"  cy="276" r="2.4" fill="#D4B36A"/>
+  <circle cx="82"  cy="276" r="3.2" fill="#FFF2D0"/>
+  <circle cx="90"  cy="276" r="2.4" fill="#D4B36A"/>
+  <circle cx="102" cy="276" r="1.8" fill="#7A5F2E"/>
 
-  <!-- Version -->
-  <text x="92" y="299"
+  ${VERSION ? `<text x="${cx}" y="300"
         font-family="Arial,Helvetica,sans-serif"
         font-size="7.5"
-        fill="#2a4a6e"
-        text-anchor="middle">v2.0.0</text>
+        fill="#5A4E33"
+        text-anchor="middle">v${VERSION}</text>` : ''}
 </svg>`;
 
-  return svgToBMP(svg, W, H, '#04090f');
+  return svgToBMP(svg, W, H, '#07080C');
 }
 
 // ── Header 150×57 (Directory / Progress / Components pages) ───────────────
 async function buildHeader() {
   const W = 150, H = 57;
+  const cx = 126, cy = 26;
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
+    ${DEFS}
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%"   stop-color="#04090f"/>
-      <stop offset="100%" stop-color="#0b1e3d"/>
+      <stop offset="0%"   stop-color="#0B0C11"/>
+      <stop offset="100%" stop-color="#07080C"/>
     </linearGradient>
-    <linearGradient id="bottomLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#1d4ed8"/>
-      <stop offset="50%"  stop-color="#60a5fa"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
-    </linearGradient>
-    <radialGradient id="rGlow" cx="80%" cy="50%" r="40%">
-      <stop offset="0%"   stop-color="#1d4ed8" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#04090f" stop-opacity="0"/>
+    <radialGradient id="rGlow" cx="82%" cy="45%" r="45%">
+      <stop offset="0%"   stop-color="#D4B36A" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#07080C" stop-opacity="0"/>
     </radialGradient>
+    <linearGradient id="bottomLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#7A5F2E"/>
+      <stop offset="50%"  stop-color="#D4B36A"/>
+      <stop offset="100%" stop-color="#7A5F2E"/>
+    </linearGradient>
   </defs>
 
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
   <rect width="${W}" height="${H}" fill="url(#rGlow)"/>
 
   <!-- Bottom accent line -->
-  <rect x="0" y="${H - 3}" width="${W}" height="3" fill="url(#bottomLine)"/>
+  <rect x="0" y="${H - 2.5}" width="${W}" height="2.5" fill="url(#bottomLine)"/>
 
-  <!-- Logo circle (right side) -->
-  <circle cx="124" cy="27" r="18"   fill="#07152b" stroke="#2563eb" stroke-width="1.8"/>
-  <circle cx="124" cy="27" r="12"   fill="#0e2a56"/>
-  <ellipse cx="124" cy="27" rx="18" ry="7" fill="none" stroke="#3b82f6" stroke-width="0.9" opacity="0.45"/>
-  <circle  cx="142" cy="27" r="3.5" fill="#60a5fa" opacity="0.8"/>
-  <circle  cx="106" cy="27" r="2.5" fill="#93c5fd" opacity="0.6"/>
+  <!-- Diamond glyph (right side) -->
+  <g transform="rotate(45 ${cx} ${cy})" fill="none">
+    <rect x="${cx-15}" y="${cy-15}" width="30" height="30" rx="5" stroke="url(#edge)" stroke-width="2.4"/>
+    <rect x="${cx-9}"  y="${cy-9}"  width="18" height="18" rx="4" stroke="#D4B36A" stroke-width="1.6" opacity="0.55"/>
+  </g>
+  <circle cx="${cx}" cy="${cy}" r="12" fill="url(#coreGlow)" filter="url(#soft)"/>
+  <circle cx="${cx}" cy="${cy}" r="4" fill="#FFF6DD"/>
 
-  <!-- P letter -->
-  <text x="118" y="33"
+  <!-- Wordmark -->
+  <text x="14" y="27"
         font-family="Georgia,'Times New Roman',serif"
         font-size="17"
-        font-weight="bold"
-        fill="#f0f8ff"
-        opacity="0.95">P</text>
+        fill="#F4EFE4">QuantumX</text>
+  <text x="15" y="40"
+        font-family="Arial,Helvetica,sans-serif"
+        font-size="7"
+        font-weight="600"
+        fill="#D4B36A"
+        letter-spacing="4">SETUP</text>
 </svg>`;
 
-  return svgToBMP(svg, W, H, '#04090f');
+  return svgToBMP(svg, W, H, '#07080C');
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────

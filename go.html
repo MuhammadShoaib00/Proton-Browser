@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Shadow Rukhw — a beautiful, fast, and fully responsive static website template.">
+<title>Shadow Rukhw — Beautiful Static Site</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+  :root{
+    --primary:#764ba2;
+    --secondary:#667eea;
+    --accent:#f093fb;
+    --dark:#1e1b2e;
+    --light:#f8f7fc;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:'Segoe UI',Tahoma,sans-serif;
+    background:var(--light);
+    color:#222;
+  }
+  a{text-decoration:none;color:inherit;}
+  ul{list-style:none;}
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar{width:10px;}
+  ::-webkit-scrollbar-track{background:var(--light);}
+  ::-webkit-scrollbar-thumb{background:var(--primary);border-radius:6px;}
+
+  /* NAVBAR */
+  .navbar{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 48px;
+    background:rgba(30,27,46,0.85);
+    backdrop-filter:blur(10px);
+    transition:padding .3s,background .3s;
+  }
+  .navbar.scrolled{padding:12px 48px;background:rgba(30,27,46,0.97);box-shadow:0 6px 20px rgba(0,0,0,.2);}
+  .navbar .logo{
+    color:#fff;font-size:24px;font-weight:800;letter-spacing:1px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .navbar .logo i{color:var(--accent);}
+  .nav-links{display:flex;gap:32px;align-items:center;}
+  .nav-links a{
+    color:#eee;font-weight:500;position:relative;padding:6px 0;
+    transition:color .2s;
+  }
+  .nav-links a:hover,.nav-links a.active{color:var(--accent);}
+  .nav-links a::after{
+    content:'';position:absolute;bottom:0;left:0;width:0;height:2px;
+    background:var(--accent);transition:width .3s;
+  }
+  .nav-links a:hover::after,.nav-links a.active::after{width:100%;}
+  .nav-links .btn-nav{
+    background:var(--accent);color:#1e1b2e;padding:10px 22px;
+    border-radius:24px;font-weight:700;
+  }
+  .menu-toggle{display:none;color:#fff;font-size:24px;cursor:pointer;}
+
+  /* HERO */
+  .hero{
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:120px 20px 80px;
+    background:linear-gradient(135deg,var(--secondary),var(--primary));
+    color:#fff;position:relative;overflow:hidden;
+  }
+  .hero::before{
+    content:'';position:absolute;width:600px;height:600px;
+    background:radial-gradient(circle,var(--accent) 0%,transparent 70%);
+    opacity:.25;top:-200px;right:-200px;
+  }
+  .hero h1{font-size:58px;margin-bottom:18px;animation:fadeInUp .8s ease;}
+  .hero p{font-size:20px;max-width:600px;opacity:.9;margin-bottom:34px;animation:fadeInUp 1s ease;}
+  .hero-btns{display:flex;gap:16px;animation:fadeInUp 1.2s ease;}
+  .btn{
+    padding:14px 34px;border-radius:30px;font-weight:700;
+    box-shadow:0 8px 20px rgba(0,0,0,.2);transition:transform .2s,background .2s;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn-primary{background:#fff;color:var(--primary);}
+  .btn-outline{border:2px solid #fff;color:#fff;}
+  .btn:hover{transform:translateY(-4px);}
+  .scroll-hint{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);color:#fff;opacity:.8;animation:bounce 2s infinite;}
+
+  /* REVEAL ON SCROLL */
+  .reveal{opacity:0;transform:translateY(30px);transition:opacity .6s ease,transform .6s ease;}
+  .reveal.visible{opacity:1;transform:translateY(0);}
+
+  /* SECTIONS */
+  section{padding:90px 48px;}
+  .section-title{text-align:center;margin-bottom:56px;}
+  .section-title span{color:var(--primary);font-weight:700;letter-spacing:2px;text-transform:uppercase;font-size:13px;}
+  .section-title h2{font-size:38px;margin-top:8px;color:var(--dark);}
+
+  /* STATS */
+  .stats{background:#fff;display:flex;flex-wrap:wrap;justify-content:center;gap:60px;text-align:center;padding:60px 20px;}
+  .stat h3{font-size:42px;color:var(--primary);}
+  .stat p{color:#666;font-size:14px;margin-top:6px;}
+
+  /* FEATURES */
+  .features-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:28px;
+  }
+  .feature-card{
+    background:#fff;padding:36px 28px;border-radius:18px;text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.06);transition:transform .25s,box-shadow .25s;
+  }
+  .feature-card:hover{transform:translateY(-8px);box-shadow:0 16px 34px rgba(0,0,0,.12);}
+  .feature-card .icon{
+    width:64px;height:64px;border-radius:50%;
+    background:linear-gradient(135deg,var(--secondary),var(--primary));
+    display:flex;align-items:center;justify-content:center;
+    margin:0 auto 18px;color:#fff;font-size:26px;
+  }
+  .feature-card h3{margin-bottom:10px;color:var(--dark);}
+  .feature-card p{font-size:14px;color:#666;line-height:1.6;}
+
+  /* SERVICES / DARK BAND */
+  .services{background:var(--dark);color:#fff;}
+  .services .section-title h2{color:#fff;}
+  .service-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;}
+  .service-item{
+    background:rgba(255,255,255,.06);padding:30px;border-radius:16px;
+    border:1px solid rgba(255,255,255,.1);transition:transform .25s,background .25s;
+  }
+  .service-item:hover{transform:translateY(-6px);background:rgba(255,255,255,.1);}
+  .service-item i{font-size:28px;color:var(--accent);margin-bottom:14px;}
+  .service-item h4{margin-bottom:8px;}
+  .service-item p{font-size:14px;opacity:.75;line-height:1.6;}
+
+  /* PORTFOLIO */
+  .portfolio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;}
+  .portfolio-item{
+    position:relative;border-radius:16px;overflow:hidden;height:220px;
+    background:linear-gradient(135deg,var(--secondary),var(--primary));
+    display:flex;align-items:center;justify-content:center;
+  }
+  .portfolio-item .overlay{
+    position:absolute;inset:0;background:rgba(30,27,46,.55);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .3s;color:#fff;text-align:center;padding:20px;
+  }
+  .portfolio-item:hover .overlay{opacity:1;}
+  .portfolio-item i{font-size:36px;color:#fff;opacity:.5;}
+  .portfolio-item .overlay i{opacity:1;margin-bottom:10px;font-size:26px;color:var(--accent);}
+
+  /* TESTIMONIALS */
+  .testimonials{background:var(--light);}
+  .testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:26px;}
+  .testi-card{
+    background:#fff;border-radius:16px;padding:30px;box-shadow:0 10px 30px rgba(0,0,0,.06);
+    transition:transform .25s;
+  }
+  .testi-card:hover{transform:translateY(-6px);}
+  .testi-card p{font-style:italic;color:#555;margin-bottom:18px;}
+  .testi-user{display:flex;align-items:center;gap:12px;}
+  .testi-user .avatar{
+    width:44px;height:44px;border-radius:50%;
+    background:linear-gradient(135deg,var(--secondary),var(--accent));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;
+  }
+  .testi-user h5{color:var(--dark);}
+  .testi-user span{font-size:12px;color:#888;}
+
+  /* PRICING */
+  .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:28px;}
+  .price-card{
+    background:#fff;border-radius:18px;padding:40px 28px;text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.06);border:2px solid transparent;transition:transform .25s,border-color .25s;
+  }
+  .price-card:hover{transform:translateY(-8px);}
+  .price-card.featured{border-color:var(--accent);position:relative;}
+  .price-card.featured::before{
+    content:'Most Popular';position:absolute;top:-14px;left:50%;transform:translateX(-50%);
+    background:var(--accent);color:#1e1b2e;font-size:12px;font-weight:700;
+    padding:6px 16px;border-radius:20px;
+  }
+  .price-card h3{margin-bottom:10px;color:var(--dark);}
+  .price-card .price{font-size:38px;font-weight:800;color:var(--primary);margin:14px 0;}
+  .price-card .price span{font-size:14px;color:#888;font-weight:400;}
+  .price-card ul{margin:20px 0;text-align:left;}
+  .price-card ul li{padding:8px 0;font-size:14px;color:#555;border-bottom:1px solid #f0f0f0;}
+  .price-card ul li i{color:var(--primary);margin-right:8px;}
+
+  /* CTA */
+  .cta{
+    text-align:center;background:linear-gradient(135deg,var(--primary),var(--secondary));
+    color:#fff;padding:70px 20px;
+  }
+  .cta h2{font-size:32px;margin-bottom:20px;}
+
+  /* FOOTER */
+  footer{background:var(--dark);color:#ccc;padding:60px 48px 24px;}
+  .footer-grid{
+    display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:32px;margin-bottom:40px;
+  }
+  .footer-brand .logo{color:#fff;font-size:22px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  .footer-brand .logo i{color:var(--accent);}
+  .footer-brand p{font-size:14px;line-height:1.7;opacity:.75;margin-bottom:18px;}
+  .socials{display:flex;gap:12px;}
+  .socials a{
+    width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.08);
+    display:flex;align-items:center;justify-content:center;transition:background .2s,transform .2s;
+  }
+  .socials a:hover{background:var(--accent);color:#1e1b2e;transform:translateY(-3px);}
+  .footer-col h4{color:#fff;margin-bottom:16px;font-size:16px;}
+  .footer-col ul li{margin-bottom:10px;}
+  .footer-col ul li a{font-size:14px;opacity:.75;transition:opacity .2s,color .2s;}
+  .footer-col ul li a:hover{opacity:1;color:var(--accent);}
+  .footer-bottom{
+    border-top:1px solid rgba(255,255,255,.08);padding-top:20px;
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;
+    font-size:13px;opacity:.6;
+  }
+
+  /* BACK TO TOP */
+  #backToTop{
+    position:fixed;bottom:28px;right:28px;width:48px;height:48px;border-radius:50%;
+    background:var(--accent);color:#1e1b2e;display:flex;align-items:center;justify-content:center;
+    font-size:18px;cursor:pointer;box-shadow:0 8px 20px rgba(0,0,0,.25);
+    opacity:0;pointer-events:none;transition:opacity .3s,transform .2s;z-index:99;
+  }
+  #backToTop.show{opacity:1;pointer-events:auto;}
+  #backToTop:hover{transform:translateY(-4px);}
+
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes bounce{0%,100%{transform:translate(-50%,0);}50%{transform:translate(-50%,10px);}}
+
+  @media(max-width:900px){
+    .footer-grid{grid-template-columns:1fr 1fr;}
+  }
+  @media(max-width:768px){
+    .nav-links{position:fixed;top:70px;right:-100%;background:var(--dark);
+      flex-direction:column;width:220px;padding:24px;gap:20px;transition:right .3s;border-radius:0 0 0 12px;}
+    .nav-links.active{right:0;}
+    .menu-toggle{display:block;}
+    .hero h1{font-size:38px;}
+    .footer-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+  <nav class="navbar" id="navbar">
+    <a href="#home" class="logo"><i class="fa-solid fa-bolt"></i> Shadow Rukhw</a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#home">Home</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#services">Services</a></li>
+      <li><a href="#portfolio">Work</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#contact" class="btn-nav">Contact</a></li>
+    </ul>
+    <div class="menu-toggle" onclick="document.getElementById('navLinks').classList.toggle('active')">
+      <i class="fa-solid fa-bars"></i>
+    </div>
+  </nav>
+
+  <section class="hero" id="home">
+    <h1>Build Something Beautiful</h1>
+    <p>A clean, modern static site starter — fast, responsive, and packed with everything you need to launch.</p>
+    <div class="hero-btns">
+      <a href="#services" class="btn btn-primary"><i class="fa-solid fa-rocket"></i> Get Started</a>
+      <a href="#features" class="btn btn-outline"><i class="fa-solid fa-circle-play"></i> Learn More</a>
+    </div>
+    <div class="scroll-hint"><i class="fa-solid fa-chevron-down"></i></div>
+  </section>
+
+  <section class="stats">
+    <div class="stat reveal"><h3 data-count="500">0</h3><p>Happy Clients</p></div>
+    <div class="stat reveal"><h3 data-count="1200">0</h3><p>Projects Done</p></div>
+    <div class="stat reveal"><h3 data-count="15">0</h3><p>Years Experience</p></div>
+    <div class="stat reveal"><h3 data-count="40">0</h3><p>Team Members</p></div>
+  </section>
+
+  <section id="features">
+    <div class="section-title reveal">
+      <span>Why Choose Us</span>
+      <h2>Everything You Need</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="icon"><i class="fa-solid fa-gauge-high"></i></div>
+        <h3>Lightning Fast</h3>
+        <p>Optimized markup and CSS so your pages load instantly on any device.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon"><i class="fa-solid fa-mobile-screen"></i></div>
+        <h3>Fully Responsive</h3>
+        <p>Looks perfect on phones, tablets, and desktops without extra work.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon"><i class="fa-solid fa-palette"></i></div>
+        <h3>Easy to Customize</h3>
+        <p>Simple, well-structured code so you can tweak colors and layout easily.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="icon"><i class="fa-solid fa-shield-halved"></i></div>
+        <h3>Reliable & Secure</h3>
+        <p>Clean static files with no dependencies to worry about breaking.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="services" id="services">
+    <div class="section-title reveal">
+      <span>What We Offer</span>
+      <h2>Our Services</h2>
+    </div>
+    <div class="service-list">
+      <div class="service-item reveal">
+        <i class="fa-solid fa-code"></i>
+        <h4>Web Development</h4>
+        <p>Modern, clean websites built with performance and design in mind.</p>
+      </div>
+      <div class="service-item reveal">
+        <i class="fa-solid fa-pen-ruler"></i>
+        <h4>UI/UX Design</h4>
+        <p>Beautiful, user-friendly interfaces tailored to your brand.</p>
+      </div>
+      <div class="service-item reveal">
+        <i class="fa-solid fa-magnifying-glass-chart"></i>
+        <h4>SEO Optimization</h4>
+        <p>Get found on search engines with a well-structured site.</p>
+      </div>
+      <div class="service-item reveal">
+        <i class="fa-solid fa-headset"></i>
+        <h4>24/7 Support</h4>
+        <p>We're always here to help you keep your site running smoothly.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="portfolio">
+    <div class="section-title reveal">
+      <span>Our Work</span>
+      <h2>Recent Projects</h2>
+    </div>
+    <div class="portfolio-grid">
+      <div class="portfolio-item reveal"><i class="fa-solid fa-image"></i>
+        <div class="overlay"><i class="fa-solid fa-magnifying-glass"></i><h4>Brand Website</h4></div>
+      </div>
+      <div class="portfolio-item reveal"><i class="fa-solid fa-image"></i>
+        <div class="overlay"><i class="fa-solid fa-magnifying-glass"></i><h4>E-commerce App</h4></div>
+      </div>
+      <div class="portfolio-item reveal"><i class="fa-solid fa-image"></i>
+        <div class="overlay"><i class="fa-solid fa-magnifying-glass"></i><h4>Portfolio Design</h4></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="testimonials" id="testimonials">
+    <div class="section-title reveal">
+      <span>Testimonials</span>
+      <h2>What People Say</h2>
+    </div>
+    <div class="testi-grid">
+      <div class="testi-card reveal">
+        <p>"Absolutely love the design — clean, fast, and easy to customize for our needs."</p>
+        <div class="testi-user">
+          <div class="avatar">A</div>
+          <div><h5>Ayesha Khan</h5><span>Product Manager</span></div>
+        </div>
+      </div>
+      <div class="testi-card reveal">
+        <p>"The best static template I've used. Everything just works out of the box."</p>
+        <div class="testi-user">
+          <div class="avatar">B</div>
+          <div><h5>Bilal Ahmed</h5><span>Developer</span></div>
+        </div>
+      </div>
+      <div class="testi-card reveal">
+        <p>"Great support and a beautiful, modern layout. Highly recommended!"</p>
+        <div class="testi-user">
+          <div class="avatar">S</div>
+          <div><h5>Sara Malik</h5><span>Designer</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="section-title reveal">
+      <span>Pricing</span>
+      <h2>Simple, Fair Plans</h2>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card reveal">
+        <h3>Starter</h3>
+        <div class="price">$19<span>/mo</span></div>
+        <ul>
+          <li><i class="fa-solid fa-check"></i>1 Website</li>
+          <li><i class="fa-solid fa-check"></i>Basic Support</li>
+          <li><i class="fa-solid fa-check"></i>5GB Storage</li>
+        </ul>
+        <a href="#contact" class="btn btn-primary" style="background:var(--primary);color:#fff;width:100%;justify-content:center;">Choose Plan</a>
+      </div>
+      <div class="price-card featured reveal">
+        <h3>Professional</h3>
+        <div class="price">$49<span>/mo</span></div>
+        <ul>
+          <li><i class="fa-solid fa-check"></i>5 Websites</li>
+          <li><i class="fa-solid fa-check"></i>Priority Support</li>
+          <li><i class="fa-solid fa-check"></i>50GB Storage</li>
+        </ul>
+        <a href="#contact" class="btn btn-primary" style="background:var(--primary);color:#fff;width:100%;justify-content:center;">Choose Plan</a>
+      </div>
+      <div class="price-card reveal">
+        <h3>Enterprise</h3>
+        <div class="price">$99<span>/mo</span></div>
+        <ul>
+          <li><i class="fa-solid fa-check"></i>Unlimited Websites</li>
+          <li><i class="fa-solid fa-check"></i>24/7 Support</li>
+          <li><i class="fa-solid fa-check"></i>500GB Storage</li>
+        </ul>
+        <a href="#contact" class="btn btn-primary" style="background:var(--primary);color:#fff;width:100%;justify-content:center;">Choose Plan</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" id="contact">
+    <h2>Ready to get started?</h2>
+    <a href="#" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i> Contact Us Today</a>
+  </section>
+
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo"><i class="fa-solid fa-bolt"></i> Shadow Rukhw</div>
+        <p>Building beautiful, fast, and reliable static websites for everyone.</p>
+        <div class="socials">
+          <a href="#"><i class="fa-brands fa-facebook-f"></i></a>
+          <a href="#"><i class="fa-brands fa-twitter"></i></a>
+          <a href="#"><i class="fa-brands fa-instagram"></i></a>
+          <a href="#"><i class="fa-brands fa-linkedin-in"></i></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#">About</a></li>
+          <li><a href="#">Careers</a></li>
+          <li><a href="#">Blog</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#contact">Contact</a></li>
+          <li><a href="#">FAQs</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#">Privacy</a></li>
+          <li><a href="#">Terms</a></li>
+          <li><a href="#">Cookies</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 Shadow Rukhw. All rights reserved.</span>
+      <span>Made with <i class="fa-solid fa-heart" style="color:#f093fb;"></i> for the web</span>
+    </div>
+  </footer>
+
+  <div id="backToTop"><i class="fa-solid fa-arrow-up"></i></div>
+
+<script>
+  // navbar shrink on scroll
+  const navbar = document.getElementById('navbar');
+  const backToTop = document.getElementById('backToTop');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 40) { navbar.classList.add('scrolled'); backToTop.classList.add('show'); }
+    else { navbar.classList.remove('scrolled'); backToTop.classList.remove('show'); }
+    highlightNav();
+  });
+  backToTop.addEventListener('click', () => window.scrollTo({top:0, behavior:'smooth'}));
+
+  // mobile menu close on link click
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.addEventListener('click', () => document.getElementById('navLinks').classList.remove('active'));
+  });
+
+  // active nav link highlight
+  const sections = document.querySelectorAll('section[id]');
+  const navA = document.querySelectorAll('.nav-links a');
+  function highlightNav(){
+    let current = '';
+    sections.forEach(sec => {
+      const top = sec.offsetTop - 120;
+      if (window.scrollY >= top) current = sec.getAttribute('id');
+    });
+    navA.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+
+  // reveal on scroll
+  const revealEls = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) entry.target.classList.add('visible');
+    });
+  }, { threshold: 0.15 });
+  revealEls.forEach(el => observer.observe(el));
+
+  // animated counters
+  const counters = document.querySelectorAll('[data-count]');
+  const counterObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const el = entry.target;
+        const target = +el.getAttribute('data-count');
+        let count = 0;
+        const step = Math.max(1, Math.ceil(target / 60));
+        const tick = () => {
+          count += step;
+          if (count >= target) { el.textContent = target; }
+          else { el.textContent = count; requestAnimationFrame(tick); }
+        };
+        tick();
+        counterObserver.unobserve(el);
+      }
+    });
+  }, { threshold: 0.5 });
+  counters.forEach(c => counterObserver.observe(c));
+</script>
+
+</body>
+</html>

@@ -1,19 +1,104 @@
-const { app, BrowserWindow, ipcMain, session, protocol, nativeImage, dialog, Tray, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, session, protocol, nativeImage, dialog, Tray, Menu, globalShortcut, nativeTheme, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn, spawnSync } = require('child_process');
+// ESM import so electron-vite/Rollup bundles this local module into out/main
+// (relative require() is left unresolved by the SSR build).
+import { TabsController } from './tabs-controller.js';
+
+// ── Resource path helpers ───────────────────────────────────────────────────
+// This file is bundled by electron-vite to <root>/out/main/index.js, so
+// __dirname is out/main — NOT the project root. Disk assets are resolved
+// through these helpers: in dev they sit at the project root; in a packaged
+// build they ship via electron-builder (extraResources / asarUnpack).
+const APP_ROOT    = path.join(__dirname, '..', '..');            // out/main -> <root>
+const PRELOAD_DIR = path.join(__dirname, '..', 'preload');       // out/preload
+const RES_DIR     = app.isPackaged ? path.join(process.resourcesPath, 'resources')
+                                   : path.join(APP_ROOT, 'resources');
+const ASSETS_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'assets')
+                                   : path.join(APP_ROOT, 'assets');
+const NATIVE_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked', 'build', 'Release')
+                                   : path.join(APP_ROOT, 'build', 'Release');
+const RENDERER_HTML = path.join(__dirname, '..', 'renderer', 'index.html'); // prod build output
 
 // Give the dev instance its own data directory so it never shares cache files
 // with the installed AppRuntime.exe that may already be running in the tray.
 // Shared cache = locked file handles = "Unable to move the cache" on every launch.
 if (!app.isPackaged) {
-  app.setPath('userData', path.join(app.getPath('appData'), 'quantumx-dev'));
+  const _devData = path.join(app.getPath('appData'), 'quantumx-dev');
+  app.setPath('userData', _devData);
+  // Override Chromium's computed cache paths with explicit locations.
+  // Without this the out-of-process network service tries to RENAME the default
+  // Cache/ directory during initialisation and fails with ERROR_ACCESS_DENIED (0x5)
+  // when a previous dev instance left file handles open (crash, tray residue, etc.).
+  // Supplying an explicit path makes Chromium skip the rename/migrate step entirely.
+  app.commandLine.appendSwitch('disk-cache-dir',  path.join(_devData, 'NetCache'));
+  app.commandLine.appendSwitch('media-cache-dir', path.join(_devData, 'MediaCache'));
+}
+
+// ── Dev-only diagnostic switches (all default OFF; packaged builds unaffected) ──
+// Used to bisect which subsystem breaks a page. Examples:
+//   QX_SAFE=1 npm run dev          → disable everything below
+//   QX_NO_PRELOAD=1 npm run dev    → tabs get no page preload
+//   QX_NO_ADFILTER=1 npm run dev   → no network ad filtering / IMA redirect
+//   QX_NO_INJECT=1 npm run dev     → renderer skips injections + bridge poll
+const _qxSafe = process.env.QX_SAFE === '1';
+const QX = {
+  safe:        _qxSafe,
+  noPreload:   _qxSafe || process.env.QX_NO_PRELOAD === '1',
+  noAdFilter:  _qxSafe || process.env.QX_NO_ADFILTER === '1',
+  noInject:    _qxSafe || process.env.QX_NO_INJECT === '1'
+};
+if (QX.safe || QX.noPreload || QX.noAdFilter || QX.noInject) {
+  console.log('[QX-DEBUG] flags →', JSON.stringify(QX));
 }
 
 let mainWindow;
+let chromeView = null;      // WebContentsView hosting index.html (the browser chrome)
+let tabs = null;            // TabsController — owns WebContentsView web tabs
+// contentTop = pixel offset where the page content begins (tab-strip + navbar,
+// +embed toolbar). expanded = chrome view covers the whole window (an overlay is
+// open) vs. collapsed to just the top strip so the page below is interactive.
+let uiLayout = { contentTop: 98, expanded: true };
 let screenProtection;
+
+// Send an IPC message to the chrome renderer (index.html now lives in chromeView,
+// not the window's own webContents).
+function uiSend(channel, ...args) {
+  try {
+    if (chromeView && chromeView.webContents && !chromeView.webContents.isDestroyed()) {
+      chromeView.webContents.send(channel, ...args);
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, ...args);
+    }
+  } catch (_) {}
+}
+
+// Position the chrome overlay view and the active tab view for the current layout.
+function applyLayout() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const cb = mainWindow.getContentBounds();
+  const W = cb.width, H = cb.height;
+  const top = uiLayout.contentTop || 98;
+  if (chromeView) {
+    chromeView.setBounds(uiLayout.expanded
+      ? { x: 0, y: 0, width: W, height: H }
+      : { x: 0, y: 0, width: W, height: top });
+  }
+  if (tabs) tabs.setBounds({ x: 0, y: top, width: W, height: Math.max(0, H - top) });
+  // Push physical-pixel content-area bounds to the renderer for the native
+  // window-embed feature (it can't measure the content area itself now that the
+  // chrome view may be collapsed).
+  try {
+    const sf = screen.getDisplayMatching(cb).scaleFactor || 1;
+    uiSend('ui:content-bounds', {
+      x: 0, y: Math.round(top * sf),
+      w: Math.round(W * sf), h: Math.round(Math.max(0, H - top) * sf)
+    });
+  } catch (_) {}
+}
 let activeDownloads = new Map();
 let YTDlpWrap, WebTorrent, axios;
 let tray = null;
@@ -282,7 +367,7 @@ function recreateShortcuts() {
 function createTray() {
   if (tray) return;
   try {
-    const iconPath = path.join(__dirname, 'assets', 'logo.png');
+    const iconPath = path.join(ASSETS_DIR, 'logo.png');
     const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
     tray = new Tray(icon);
     tray.setToolTip('QuantumX — click to open');
@@ -359,7 +444,7 @@ try {
 
 // Try to load the native screen protection module
 try {
-  screenProtection = require('./build/Release/screen-protection.node');
+  screenProtection = require(path.join(NATIVE_DIR, 'screen-protection.node'));
 } catch (err) {
   console.log('Screen protection module not available. Please run: npm run rebuild');
 }
@@ -444,7 +529,7 @@ function startMonitoringDetection() {
     const changed = JSON.stringify(found) !== JSON.stringify(_detectedMonitorApps);
     _detectedMonitorApps = found;
     if (changed && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('monitoring-detected', { apps: found });
+      uiSend('monitoring-detected', { apps: found });
     }
   };
   check(); // run immediately on startup
@@ -492,8 +577,9 @@ function maskWindowTitle() {
 
 // Prevent the HTML page-title from overwriting our masked title
 function suppressPageTitleUpdates() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.webContents.on('page-title-updated', (event) => {
+  const wc = (chromeView && chromeView.webContents) || (mainWindow && mainWindow.webContents);
+  if (!wc || wc.isDestroyed()) return;
+  wc.on('page-title-updated', (event) => {
     event.preventDefault();
     maskWindowTitle();
   });
@@ -527,9 +613,9 @@ function applyScreenProtection(enable) {
 function createWindow() {
   // Load icon - try PNG first, fallback to SVG
   let appIcon;
-  const icoIconPath = path.join(__dirname, 'assets', 'logo.ico');
-  const pngIconPath = path.join(__dirname, 'assets', 'logo.png');
-  const svgIconPath = path.join(__dirname, 'assets', 'logo.svg');
+  const icoIconPath = path.join(ASSETS_DIR, 'logo.ico');
+  const pngIconPath = path.join(ASSETS_DIR, 'logo.png');
+  const svgIconPath = path.join(ASSETS_DIR, 'logo.svg');
   
   if (process.platform === 'win32' && fs.existsSync(icoIconPath)) {
     appIcon = nativeImage.createFromPath(icoIconPath);
@@ -548,7 +634,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(PRELOAD_DIR, 'index.js'),
       webviewTag: true,
       sandbox: false,
       // Performance optimizations
@@ -557,7 +643,7 @@ function createWindow() {
     },
     title: 'QuantumX',
     icon: appIcon,
-    backgroundColor: '#202124',
+    backgroundColor: '#06070b',
     skipTaskbar: true,
     frame: false, // Custom frameless window
     transparent: false,
@@ -569,13 +655,59 @@ function createWindow() {
     visualEffectState: 'active'
   });
 
-  mainWindow.loadFile('index.html');
+  // Chrome (index.html) renders in a transparent WebContentsView layered ON TOP
+  // of the tab views, so overlays/menus/panels can float above the page. The
+  // window's own webContents stays blank (a solid background behind everything).
+  chromeView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(PRELOAD_DIR, 'index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false,
+      // Surface dev bisect flags to the renderer (read in src/preload/index.js).
+      additionalArguments: QX.noInject ? ['--qx-no-inject'] : []
+    }
+  });
+  try { chromeView.setBackgroundColor('#00000000'); } catch (_) {}
+  mainWindow.contentView.addChildView(chromeView);
+
+  // electron-vite serves the renderer from a dev server in development and from
+  // the built HTML in production.
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
+    chromeView.webContents.loadURL(process.env.ELECTRON_RENDERER_URL);
+  } else {
+    chromeView.webContents.loadFile(RENDERER_HTML);
+  }
+
+  // Own web tabs as main-process WebContentsViews (replaces renderer <webview>).
+  // Constructed AFTER chromeView so tab views insert beneath it (see TabsController).
+  // Uses the same persist:secure session the UA/permission/ad-filter wiring is
+  // attached to, and the page preload that performs the fingerprint spoof + IMA stub.
+  tabs = new TabsController(mainWindow, {
+    session: session.fromPartition('persist:secure'),
+    userAgent: CHROME_UA,
+    // QX_NO_PRELOAD / QX_SAFE: run tabs with no page preload (disables the
+    // fingerprint spoof, IMA stub and YouTube cosmetic layer) for bisecting.
+    preloadPath: QX.noPreload ? null : path.join(PRELOAD_DIR, 'page-preload.js'),
+    // Page events must go to the chrome renderer (chromeView), not the blank
+    // window webContents.
+    send: uiSend
+  });
+
+  // Initial layout, and keep views sized on window resize.
+  applyLayout();
+  mainWindow.on('resize', applyLayout);
+
+  // Default web content to dark (matches the default chrome theme) until the
+  // renderer restores the user's saved theme preference.
+  try { nativeTheme.themeSource = 'dark'; } catch (_) {}
 
   // Suppress page-title-updated so the window title stays masked at OS level
   suppressPageTitleUpdates();
 
-  // Apply all protections after window content is ready
-  mainWindow.webContents.on('did-finish-load', () => {
+  // Apply all protections after the chrome finishes loading.
+  chromeView.webContents.on('did-finish-load', () => {
     applyScreenProtection(true);
     applyStealthWindowStyle();
     maskWindowTitle();
@@ -638,7 +770,7 @@ function setupDownloadHandler() {
     });
 
     // Send initial download info
-    mainWindow.webContents.send('download-started', {
+    uiSend('download-started', {
       id: downloadId,
       fileName: fileName,
       totalBytes: totalBytes
@@ -652,7 +784,7 @@ function setupDownloadHandler() {
           download.receivedBytes = item.getReceivedBytes();
           download.progress = totalBytes > 0 ? (item.getReceivedBytes() / totalBytes) * 100 : 0;
           
-          mainWindow.webContents.send('download-progress', {
+          uiSend('download-progress', {
             id: downloadId,
             receivedBytes: item.getReceivedBytes(),
             totalBytes: totalBytes,
@@ -669,7 +801,7 @@ function setupDownloadHandler() {
         download.state = state;
         download.endTime = Date.now();
         
-        mainWindow.webContents.send('download-complete', {
+        uiSend('download-complete', {
           id: downloadId,
           state: state,
           filePath: filePath,
@@ -715,6 +847,70 @@ protocol.registerSchemesAsPrivileged([{
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+
+// ── Secure every new OS window (PiP, OAuth popups, etc.) ─────────────────────
+// Uses WDA_EXCLUDEFROMCAPTURE (fully invisible in screenshots, not black).
+// Node.js runs on Chromium's browser-main thread in Electron, which is the same
+// thread that creates ALL BrowserWindows — so SetWindowDisplayAffinity succeeds
+// for every window in this process, including PiP overlays.
+// IMPORTANT: Do NOT use win.setContentProtection() here — Electron's API applies
+// WDA_MONITOR which shows a black rectangle.  Our native setScreenProtection uses
+// WDA_EXCLUDEFROMCAPTURE which makes the window completely invisible, matching the
+// main window's behaviour.
+function _secureWin(win) {
+  if (!win) return;
+  const apply = () => {
+    try {
+      const hwnd = win.getNativeWindowHandle().readUInt32LE(0);
+      if (!hwnd || !screenProtection) return;
+      // WDA_EXCLUDEFROMCAPTURE → window is invisible to all capture tools
+      if (screenProtection.setScreenProtection)   screenProtection.setScreenProtection(hwnd, true);
+      // WS_EX_TOOLWINDOW → hidden from monitoring-tool EnumWindows scans
+      if (screenProtection.setStealthWindowStyle) screenProtection.setStealthWindowStyle(hwnd, true);
+    } catch (e) {}
+  };
+  apply();
+  win.once('ready-to-show', apply);
+  win.once('show', apply);
+  win.on('restore', apply);
+  setTimeout(apply, 300);
+  setTimeout(apply, 800);
+}
+
+app.on('browser-window-created', (_event, win) => _secureWin(win));
+
+// ── Polling fallback for PiP windows ─────────────────────────────────────────
+// browser-window-created may not fire when Chromium manages PiP internally.
+// BrowserWindow.getAllWindows() catches standard popup windows.
+// screenProtection.enumOwnProcessWindows() catches Chromium-internal windows
+// such as the PiP overlay that are owned by our process but NOT tracked as
+// Electron BrowserWindows — this is the key gap the previous approach missed.
+const _knownWinIds  = new Set();
+const _knownOwnHwnds = new Set();
+
+function _pollNewWindows() {
+  // 1. Standard BrowserWindows (OAuth popups, etc.)
+  BrowserWindow.getAllWindows().forEach(win => {
+    if (_knownWinIds.has(win.id)) return;
+    _knownWinIds.add(win.id);
+    _secureWin(win);
+  });
+
+  // 2. Native own-process windows (Chromium PiP overlay, not a BrowserWindow)
+  if (!screenProtection?.enumOwnProcessWindows) return;
+  try {
+    const mainHwnd = mainWindow ? mainWindow.getNativeWindowHandle().readUInt32LE(0) : 0;
+    screenProtection.enumOwnProcessWindows().forEach(hwnd => {
+      if (_knownOwnHwnds.has(hwnd)) return;
+      _knownOwnHwnds.add(hwnd);
+      if (hwnd === mainHwnd) return; // skip main window — already protected separately
+      // SetWindowDisplayAffinity: works cross-thread within the same process.
+      if (screenProtection.setScreenProtection)   screenProtection.setScreenProtection(hwnd, true);
+      if (screenProtection.setStealthWindowStyle) screenProtection.setStealthWindowStyle(hwnd, true);
+    });
+  } catch (e) {}
+}
+// Start polling after app is ready (interval set up in app.whenReady block below)
 
 // Delete the persist:secure partition HTTP cache before Chromium initialises it.
 // This prevents the "Unable to move the cache: Access is denied" errors that
@@ -766,15 +962,24 @@ app.on('ready', () => {
   // Pre-compiled regex: O(1) per request instead of O(n) array iteration.
   // Login/auth domains (accounts.google.com, facebook.com, etc.) are NOT in
   // either list so they always pass through unmodified.
-  const _adRe  = /doubleclick\.net|googlesyndication\.com|adservice\.google\.com|googleadservices\.com|google-analytics\.com|analytics\.google\.com|adnxs\.com|moatads\.com|rubiconproject\.com|pubmatic\.com|openx\.net|advertising\.com|taboola\.com|outbrain\.com|pagead2\.googlevideo\.com|ads\.youtube\.com|googleads\.g\.doubleclick\.net|static\.doubleclick\.net/;
-  const _fragRe = /\/api\/stats\/ads|\/pagead\/|\/pcs\/activeview|ad_tag_uri/;
+  const _adRe  = /doubleclick\.net|googlesyndication\.com|adservice\.google\.com|googleadservices\.com|google-analytics\.com|analytics\.google\.com|adnxs\.com|moatads\.com|rubiconproject\.com|pubmatic\.com|openx\.net|advertising\.com|taboola\.com|outbrain\.com|pagead2\.googlevideo\.com|ads\.youtube\.com|googleads\.g\.doubleclick\.net|static\.doubleclick\.net|imasdk\.googleapis\.com|tpc\.googlesyndication\.com|ade\.googlesyndication\.com|fundingchoicesmessages\.google\.com/;
+  const _fragRe = /\/api\/stats\/ads|\/pagead\/|\/pcs\/activeview|ad_tag_uri|\/youtubei\/v1\/log_event\?.*adformat|\/api\/stats\/qoe\?.*adformat/;
   // Never block: messaging, social auth, CDN — logins depend on these
   const _wlRe  = /whatsapp\.com|whatsapp\.net|fbcdn\.net|facebook\.com|gstatic\.com|googleapis\.com|telegram\.org|discord\.com|slack\.com|linkedin\.com|openai\.com|chatgpt\.com|accounts\.google|oauth|login|signin/;
 
-  // Serve ima-stub.js in place of the real IMA SDK for ad-free YouTube playback.
-  const _imaStubHandler = (_req) => {
+  // Ad/anti-adblock SCRIPTS that must never hard-fail. YouTube treats a failed
+  // load of these as "ad blocker detected" and then refuses to play the video
+  // ("An error occurred. Please try again later."). Serving an empty 200 instead
+  // of cancelling keeps the player happy while still delivering no ad code.
+  const _emptyScriptRe = /static\.doubleclick\.net\/instream\/ad_status\.js|googletagservices\.com\/tag\/js\/gpt\.js|pagead2\.googlesyndication\.com\/pagead\/js/;
+
+  // Serve ima-stub.js in place of the real IMA SDK; 'empty' → harmless no-op JS.
+  const _imaStubHandler = (req) => {
     try {
-      const js = fs.readFileSync(path.join(__dirname, 'ima-stub.js'), 'utf8');
+      if (/empty/.test(req.url)) {
+        return new Response('/* neutralized */', { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } });
+      }
+      const js = fs.readFileSync(path.join(RES_DIR, 'ima-stub.js'), 'utf8');
       return new Response(js, { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } });
     } catch (e) {
       return new Response('', { status: 404 });
@@ -789,32 +994,41 @@ app.on('ready', () => {
       if (url.includes('imasdk.googleapis.com')) {
         return callback({ redirectURL: 'proton-stub://ima3' });
       }
+      // Anti-adblock detection scripts: hand back empty JS (200) rather than a
+      // network failure, otherwise YouTube refuses to play the video.
+      if (_emptyScriptRe.test(url)) {
+        return callback({ redirectURL: 'proton-stub://empty' });
+      }
       if (_wlRe.test(url)) return callback({ cancel: false });
       callback({ cancel: _adRe.test(url) || _fragRe.test(url) });
     });
   }
 
-  buildAdFilter(session.defaultSession);
-  buildAdFilter(webviewSession);
+  // QX_NO_ADFILTER / QX_SAFE: leave all network requests untouched for bisecting.
+  if (!QX.noAdFilter) {
+    buildAdFilter(session.defaultSession);
+    buildAdFilter(webviewSession);
+  } else {
+    console.log('[QX-DEBUG] network ad filter DISABLED');
+  }
   // Register IMA stub handler on the webview session too — the redirect target
   // must resolve in the session that made the request (persist:secure).
   webviewSession.protocol.handle('proton-stub', _imaStubHandler);
 
   createWindow();
 
+  // Seed the known-window set with the main window, then start polling for new
+  // windows every 500 ms.  This guarantees PiP windows are secured within 500 ms
+  // of creation regardless of whether browser-window-created fires for them.
+  _knownWinIds.add(mainWindow.id);
+  setInterval(_pollNewWindows, 500);
+
   // Start periodic monitoring-app detection after window is ready
   startMonitoringDetection();
 
-  // Inject fingerprint-preload.js into every webview BEFORE page scripts run.
-  // contextIsolation must be false (the default for webview tags) so the preload
-  // can directly override navigator.userAgentData in the page's JavaScript context.
-  // This is what removes the "Electron" brand that Google/Facebook detect.
-  if (mainWindow) {
-    mainWindow.webContents.on('will-attach-webview', (_event, webPreferences) => {
-      webPreferences.preload = path.join(__dirname, 'fingerprint-preload.js');
-      webPreferences.contextIsolation = false;
-    });
-  }
+  // (Tabs are now WebContentsViews created by TabsController with the page
+  // preload + contextIsolation:false set directly in webPreferences — the old
+  // will-attach-webview hook for <webview> tags is no longer needed.)
 
   // If stealth was already enabled from a previous session, hide immediately
   if (stealthConfig.stealthMode && mainWindow) {
@@ -867,6 +1081,11 @@ ipcMain.handle('window-is-maximized', () => {
   return mainWindow ? mainWindow.isMaximized() : false;
 });
 
+// Make web pages (prefers-color-scheme) follow the browser theme toggle
+ipcMain.on('set-native-theme', (event, theme) => {
+  try { nativeTheme.themeSource = theme === 'light' ? 'light' : 'dark'; } catch (_) {}
+});
+
 ipcMain.handle('get-user-agent', () => CHROME_UA);
 
 // ── Screenshot protection toggle ───────────────────────────────────────────
@@ -879,16 +1098,35 @@ ipcMain.handle('get-screen-protection', () => {
   return { enabled: screenProtectionEnabled };
 });
 
-// IPC handlers
-ipcMain.handle('create-tab', async (event, url) => {
-  return { success: true, url };
-});
+// ── Tab (WebContentsView) IPC ───────────────────────────────────────────────
+// The renderer owns the tab-strip UI + injection logic and drives the actual
+// page views through these handlers. Page events flow back on 'tab:event'.
+ipcMain.handle('tab:create',     (_e, { id, url }) => { tabs && tabs.create({ id, url }); return { success: true }; });
+ipcMain.handle('tab:activate',   (_e, id) => { tabs && tabs.activate(id); return { success: true }; });
+ipcMain.handle('tab:close',      (_e, id) => { tabs && tabs.close(id); return { success: true }; });
+ipcMain.handle('tab:navigate',   (_e, id, url) => { tabs && tabs.navigate(id, url); return { success: true }; });
+ipcMain.handle('tab:back',       (_e, id) => { tabs && tabs.goBack(id); return { success: true }; });
+ipcMain.handle('tab:forward',    (_e, id) => { tabs && tabs.goForward(id); return { success: true }; });
+ipcMain.handle('tab:reload',     (_e, id) => { tabs && tabs.reload(id); return { success: true }; });
+ipcMain.handle('tab:stop',       (_e, id) => { tabs && tabs.stop(id); return { success: true }; });
+ipcMain.handle('tab:get-url',    (_e, id) => (tabs ? tabs.getURL(id) : ''));
+ipcMain.handle('tab:exec',       (_e, id, code) => (tabs ? tabs.exec(id, code) : null));
+ipcMain.handle('tab:zoom',       (_e, id, factor) => { tabs && tabs.setZoom(id, factor); return { success: true }; });
+ipcMain.handle('tab:find',       (_e, id, text, opts) => { tabs && tabs.findInPage(id, text, opts); return { success: true }; });
+ipcMain.handle('tab:stop-find',  (_e, id) => { tabs && tabs.stopFind(id); return { success: true }; });
+ipcMain.handle('tab:print',      (_e, id) => { tabs && tabs.print(id); return { success: true }; });
+ipcMain.handle('tab:devtools',   (_e, id) => { tabs && tabs.openDevTools(id); return { success: true }; });
+ipcMain.handle('tab:set-bounds', (_e, b) => { tabs && tabs.setBounds(b); return { success: true }; });
+ipcMain.handle('tab:hide-all',   () => { tabs && tabs.hideAll(); return { success: true }; });
+ipcMain.handle('tab:show-active',() => { tabs && tabs.showActive(); return { success: true }; });
 
-ipcMain.handle('close-tab', async (event, tabId) => {
-  return { success: true };
-});
-
-ipcMain.handle('navigate', async (event, url) => {
+// Overlay layering: the renderer reports the content-top offset (tab-strip +
+// navbar, +embed toolbar) and whether an overlay is open (expand the chrome view
+// to full-window) or not (collapse it to the top strip so the page is interactive).
+ipcMain.handle('ui:layout', (_e, layout) => {
+  if (layout && typeof layout.contentTop === 'number') uiLayout.contentTop = layout.contentTop;
+  if (layout && typeof layout.expanded === 'boolean') uiLayout.expanded = layout.expanded;
+  applyLayout();
   return { success: true };
 });
 
@@ -904,10 +1142,10 @@ async function getYtDlp() {
   // Download the binary if it doesn't exist
   if (!fs.existsSync(ytDlpBinaryPath)) {
     console.log('⬇️  Downloading yt-dlp binary to:', ytDlpBinaryPath);
-    if (mainWindow) mainWindow.webContents.send('yt-dlp-status', { status: 'downloading' });
+    if (mainWindow) uiSend('yt-dlp-status', { status: 'downloading' });
     await YTDlpWrap.downloadFromGithub(ytDlpBinaryPath);
     console.log('✅ yt-dlp binary downloaded');
-    if (mainWindow) mainWindow.webContents.send('yt-dlp-status', { status: 'ready' });
+    if (mainWindow) uiSend('yt-dlp-status', { status: 'ready' });
   }
   ytDlpInstance = new YTDlpWrap(ytDlpBinaryPath);
   return ytDlpInstance;
@@ -1015,7 +1253,7 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
     const outputTemplate = path.join(downloadsPath, `%(title)s ${qualityLabel}.%(ext)s`);
 
     // Notify UI that we've started
-    mainWindow.webContents.send('download-started', {
+    uiSend('download-started', {
       id: downloadId,
       fileName: 'Preparing download...',
       totalBytes: 0,
@@ -1056,7 +1294,7 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
             resolvedFilePath = destMatch[1].trim();
             fileName = path.basename(resolvedFilePath);
             // Update UI with real filename
-            mainWindow.webContents.send('download-started', {
+            uiSend('download-started', {
               id: downloadId,
               fileName,
               totalBytes: 0,
@@ -1084,7 +1322,7 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
             if (now - lastSendTime >= 250) {
               lastSendTime = now;
               const speedBytes = m[4] && m[5] ? parseBytes(m[4], m[5]) : 0;
-              mainWindow.webContents.send('download-progress', {
+              uiSend('download-progress', {
                 id: downloadId,
                 receivedBytes: Math.round(downloadedBytes),
                 totalBytes: Math.round(totalBytes),
@@ -1137,7 +1375,7 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
       proc.on('close', (code) => {
         if (code === 0) {
           console.log('✅ yt-dlp completed successfully');
-          mainWindow.webContents.send('download-progress', {
+          uiSend('download-progress', {
             id: downloadId,
             receivedBytes: Math.max(totalBytes, 1),
             totalBytes: Math.max(totalBytes, 1),
@@ -1145,7 +1383,7 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
             speed: 0,
             eta: '0:00'
           });
-          mainWindow.webContents.send('download-complete', {
+          uiSend('download-complete', {
             id: downloadId,
             state: 'completed',
             filePath: resolvedFilePath || filePath,
@@ -1158,7 +1396,7 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
             : `yt-dlp exited with code ${code}`;
           console.error('❌ yt-dlp failed:', code, errMsg);
           console.error('stderr:', stderrBuffer.substring(0, 500));
-          mainWindow.webContents.send('download-complete', { 
+          uiSend('download-complete', { 
             id: downloadId, 
             state: 'failed', 
             fileName,
@@ -1169,14 +1407,14 @@ ipcMain.handle('download-youtube', async (event, url, formatId) => {
       });
 
       proc.on('error', (err) => {
-        mainWindow.webContents.send('download-complete', { id: downloadId, state: 'failed', fileName });
+        uiSend('download-complete', { id: downloadId, state: 'failed', fileName });
         resolve({ success: false, error: err.message });
       });
     });
 
   } catch (error) {
     console.error('download-youtube error:', error.message);
-    mainWindow.webContents.send('download-complete', { id: downloadId, state: 'failed', fileName });
+    uiSend('download-complete', { id: downloadId, state: 'failed', fileName });
     return { success: false, error: error.message };
   }
 });
@@ -1203,7 +1441,7 @@ ipcMain.handle('download-torrent', async (event, magnetOrTorrentUrl) => {
       const downloadId = Date.now().toString();
 
       torrent.on('ready', () => {
-        mainWindow.webContents.send('download-started', {
+        uiSend('download-started', {
           id: downloadId,
           fileName: torrent.name,
           totalBytes: torrent.length,
@@ -1224,14 +1462,14 @@ ipcMain.handle('download-torrent', async (event, magnetOrTorrentUrl) => {
       const progressInterval = setInterval(() => {
         if (torrent.progress === 1) {
           clearInterval(progressInterval);
-          mainWindow.webContents.send('download-complete', {
+          uiSend('download-complete', {
             id: downloadId,
             state: 'completed',
             filePath: downloadsPath,
             fileName: torrent.name
           });
         } else {
-          mainWindow.webContents.send('download-progress', {
+          uiSend('download-progress', {
             id: downloadId,
             receivedBytes: torrent.downloaded,
             totalBytes: torrent.length,
@@ -1244,7 +1482,7 @@ ipcMain.handle('download-torrent', async (event, magnetOrTorrentUrl) => {
 
       torrent.on('error', (err) => {
         clearInterval(progressInterval);
-        mainWindow.webContents.send('download-complete', {
+        uiSend('download-complete', {
           id: downloadId,
           state: 'failed',
           fileName: torrent.name
@@ -1261,6 +1499,18 @@ ipcMain.handle('download-torrent', async (event, magnetOrTorrentUrl) => {
 ipcMain.handle('open-downloads-folder', async () => {
   const downloadsPath = path.join(os.homedir(), 'Downloads');
   require('electron').shell.openPath(downloadsPath);
+  return { success: true };
+});
+
+// Open a file with its default app / reveal it in the file manager. The renderer
+// can no longer require('electron') directly (contextIsolation), so it routes
+// these through IPC.
+ipcMain.handle('open-path', async (_e, filePath) => {
+  if (filePath) await require('electron').shell.openPath(filePath);
+  return { success: true };
+});
+ipcMain.handle('show-item-in-folder', async (_e, filePath) => {
+  if (filePath) require('electron').shell.showItemInFolder(filePath);
   return { success: true };
 });
 
@@ -1380,7 +1630,7 @@ if (updaterConfigured) {
     autoUpdater.on('update-available', (info) => {
       console.log('✅ Update available:', info.version);
       if (mainWindow) {
-        mainWindow.webContents.send('update-available', {
+        uiSend('update-available', {
           version: info.version,
           releaseDate: info.releaseDate
         });
@@ -1390,7 +1640,7 @@ if (updaterConfigured) {
     autoUpdater.on('update-not-available', (info) => {
       console.log('✅ App is up to date');
       if (mainWindow) {
-        mainWindow.webContents.send('update-not-available', info);
+        uiSend('update-not-available', info);
       }
     });
 
@@ -1402,7 +1652,7 @@ if (updaterConfigured) {
 
     autoUpdater.on('download-progress', (progressObj) => {
       if (mainWindow) {
-        mainWindow.webContents.send('update-download-progress', {
+        uiSend('update-download-progress', {
           percent:         Math.round(progressObj.percent),
           transferred:     progressObj.transferred,
           total:           progressObj.total,
@@ -1414,7 +1664,7 @@ if (updaterConfigured) {
     autoUpdater.on('update-downloaded', (info) => {
       console.log('✅ Update downloaded, ready to install');
       if (mainWindow) {
-        mainWindow.webContents.send('update-downloaded', {
+        uiSend('update-downloaded', {
           version:     info.version,
           releaseDate: info.releaseDate
         });
@@ -1479,7 +1729,7 @@ ipcMain.handle('get-version', () => {
 });
 
 ipcMain.handle('get-adblock-script', () => {
-  try { return fs.readFileSync(path.join(__dirname, 'yt-adblock.js'), 'utf8'); } catch (e) { return ''; }
+  try { return fs.readFileSync(path.join(RES_DIR, 'yt-adblock.js'), 'utf8'); } catch (e) { return ''; }
 });
 
 // ── Monitoring detection IPC ───────────────────────────────────────────────
@@ -1493,7 +1743,43 @@ ipcMain.handle('get-monitoring-status', () => {
   return { apps: _detectedMonitorApps, detected: _detectedMonitorApps.length > 0 };
 });
 
-// ── Window Embedding IPC ───────────────────────────────────────────────────
+// ── PiP protection IPC ────────────────────────────────────────────────────────
+// The renderer calls pre-pip-snapshot before requestPictureInPicture() and
+// post-pip-protect immediately after.  We diff our own-process window list
+// (enumOwnProcessWindows — no title filter, includes the PiP overlay that
+// enumVisibleWindows skips) to find the new HWND and secure it.
+let _preSnapOwnHwnds = new Set();
+ipcMain.handle('pre-pip-snapshot', () => {
+  _preSnapOwnHwnds = new Set();
+  if (!screenProtection) return;
+  try {
+    // Snapshot own-process HWNDs (includes the future PiP window)
+    if (screenProtection.enumOwnProcessWindows) {
+      screenProtection.enumOwnProcessWindows().forEach(h => _preSnapOwnHwnds.add(h));
+    }
+  } catch (e) {}
+});
+ipcMain.handle('post-pip-protect', () => {
+  if (!screenProtection?.enumOwnProcessWindows) return;
+  const mainHwnd = mainWindow ? mainWindow.getNativeWindowHandle().readUInt32LE(0) : 0;
+  // Poll up to 2 s (every 200 ms) for the PiP window to appear
+  let attempts = 0;
+  const iv = setInterval(() => {
+    attempts++;
+    try {
+      screenProtection.enumOwnProcessWindows().forEach(hwnd => {
+        if (_preSnapOwnHwnds.has(hwnd)) return; // was there before PiP
+        if (hwnd === mainHwnd) return;           // skip main window
+        _preSnapOwnHwnds.add(hwnd);              // mark so we don't repeat
+        _knownOwnHwnds.add(hwnd);               // keep polling loop in sync
+        if (screenProtection.setScreenProtection)   screenProtection.setScreenProtection(hwnd, true);
+        if (screenProtection.setStealthWindowStyle) screenProtection.setStealthWindowStyle(hwnd, true);
+      });
+    } catch (e) {}
+    if (attempts >= 10) clearInterval(iv);
+  }, 200);
+});
+
 ipcMain.handle('get-windows-list', () => {
   if (!screenProtection?.enumVisibleWindows) return [];
   try { return screenProtection.enumVisibleWindows(); } catch (e) { return []; }
@@ -1609,5 +1895,451 @@ ipcMain.handle('set-hotkey', (event, key) => {
   saveStealthConfig();
   if (key) registerHotkey();
   return { success: true, hotkey: stealthConfig.hotkey };
+});
+
+// ── LAN Office Chat & File Sharing ──────────────────────────────────────────
+const dgram = require('dgram');
+const http = require('http');
+
+let lanHttpServer = null;
+let lanUdpSocket = null;
+let lanHttpPort = 55055;
+const LAN_UDP_PORT = 55056;
+
+let lanUsername = stealthConfig.lanUsername || os.hostname() || 'Colleague';
+let lanPeers = new Map(); // ip -> { username, httpPort, ip, lastSeen }
+let lanChatHistory = [];
+const LAN_CHAT_HISTORY_FILE = path.join(app.getPath('userData'), 'proton-lan-chat.json');
+let lanSharedFiles = new Map(); // fileId -> { path, name, size }
+
+// Load history
+function loadLanChatHistory() {
+  try {
+    if (fs.existsSync(LAN_CHAT_HISTORY_FILE)) {
+      lanChatHistory = JSON.parse(fs.readFileSync(LAN_CHAT_HISTORY_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error('[LAN] Error loading chat history:', e);
+    lanChatHistory = [];
+  }
+}
+
+// Save history
+function saveLanChatHistory() {
+  try {
+    // Keep last 200 messages
+    if (lanChatHistory.length > 200) {
+      lanChatHistory = lanChatHistory.slice(lanChatHistory.length - 200);
+    }
+    fs.writeFileSync(LAN_CHAT_HISTORY_FILE, JSON.stringify(lanChatHistory, null, 2));
+  } catch (e) {
+    console.error('[LAN] Error saving chat history:', e);
+  }
+}
+
+// Helper to get local IP
+function getLocalIPAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name in interfaces) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+// Broadcast UDP Discovery
+function broadcastPresence(type = 'ping') {
+  if (!lanUdpSocket) return;
+  
+  const localIp = getLocalIPAddress();
+  const msg = JSON.stringify({
+    type,
+    username: lanUsername,
+    httpPort: lanHttpPort,
+    ip: localIp
+  });
+  
+  try {
+    const client = dgram.createSocket('udp4');
+    client.bind(0, '0.0.0.0', () => {
+      client.setBroadcast(true);
+      client.send(msg, LAN_UDP_PORT, '255.255.255.255', (err) => {
+        client.close();
+        if (err) console.error('[LAN] Broadcast error:', err);
+      });
+    });
+  } catch (e) {
+    console.error('[LAN] Broadcast setup error:', e);
+  }
+}
+
+// Start UDP socket to receive announcements
+function startUdpDiscovery() {
+  try {
+    lanUdpSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    
+    lanUdpSocket.on('error', (err) => {
+      console.error('[LAN] UDP error:', err);
+      try { lanUdpSocket.close(); } catch(e){}
+      lanUdpSocket = null;
+    });
+
+    lanUdpSocket.on('message', (msgStr, rinfo) => {
+      try {
+        const localIp = getLocalIPAddress();
+        // Ignore own broadcasts
+        if (rinfo.address === localIp) return;
+
+        const data = JSON.parse(msgStr.toString());
+        if (data.type === 'ping' || data.type === 'pong') {
+          const peerKey = rinfo.address;
+          const isNew = !lanPeers.has(peerKey);
+          
+          lanPeers.set(peerKey, {
+            username: data.username || 'Colleague',
+            httpPort: data.httpPort || 55055,
+            ip: rinfo.address,
+            lastSeen: Date.now()
+          });
+
+          if (isNew) {
+            notifyPeersChanged();
+            // If we got a ping, reply with pong directly so they discover us immediately
+            if (data.type === 'ping') {
+              sendDirectPong(rinfo.address);
+            }
+          } else {
+            // Update lastSeen timestamp
+            lanPeers.get(peerKey).lastSeen = Date.now();
+          }
+        }
+      } catch (e) {
+        console.error('[LAN] Error processing UDP packet:', e);
+      }
+    });
+
+    lanUdpSocket.bind(LAN_UDP_PORT, '0.0.0.0', () => {
+      try {
+        lanUdpSocket.setBroadcast(true);
+      } catch (e) {
+        console.warn('[LAN] Failed to setBroadcast, discovery might be limited:', e);
+      }
+      console.log(`[LAN] UDP listening on port ${LAN_UDP_PORT}`);
+    });
+  } catch (e) {
+    console.error('[LAN] Failed to bind UDP socket:', e);
+  }
+}
+
+// Send direct pong via UDP to a specific peer
+function sendDirectPong(peerIp) {
+  try {
+    const localIp = getLocalIPAddress();
+    const msg = JSON.stringify({
+      type: 'pong',
+      username: lanUsername,
+      httpPort: lanHttpPort,
+      ip: localIp
+    });
+    
+    const client = dgram.createSocket('udp4');
+    client.send(msg, LAN_UDP_PORT, peerIp, (err) => {
+      client.close();
+      if (err) console.error('[LAN] Error sending direct pong:', err);
+    });
+  } catch (e) {
+    console.error('[LAN] Error setting up direct pong:', e);
+  }
+}
+
+// Cleanup inactive peers (every 5 seconds)
+function startPeerCleanupTimer() {
+  setInterval(() => {
+    let changed = false;
+    const now = Date.now();
+    for (const [ip, peer] of lanPeers.entries()) {
+      if (now - peer.lastSeen > 15000) { // 15 seconds timeout
+        lanPeers.delete(ip);
+        changed = true;
+      }
+    }
+    if (changed) {
+      notifyPeersChanged();
+    }
+    // Also broadcast our own presence periodically
+    broadcastPresence('ping');
+  }, 5000);
+}
+
+function notifyPeersChanged() {
+  if (mainWindow) {
+    uiSend('lan-peers-changed', Array.from(lanPeers.values()));
+  }
+}
+
+// Start HTTP Server
+function startHttpServer() {
+  const server = http.createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    // Parse URL manually to support simple paths
+    const urlParts = req.url.split('?');
+    const pathname = urlParts[0];
+
+    // 1. Post new chat message
+    if (pathname === '/api/chat' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', () => {
+        try {
+          const messageData = JSON.parse(body);
+          // Add to local history
+          lanChatHistory.push(messageData);
+          saveLanChatHistory();
+
+          // Send to renderer
+          if (mainWindow) {
+            uiSend('lan-message-received', messageData);
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (e) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Bad Request');
+        }
+      });
+      return;
+    }
+
+    // 2. Download shared file
+    if (pathname.startsWith('/api/download/') && req.method === 'GET') {
+      const fileId = pathname.split('/').pop();
+      const fileRecord = lanSharedFiles.get(fileId);
+
+      if (!fileRecord || !fs.existsSync(fileRecord.path)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('File Not Found');
+        return;
+      }
+
+      try {
+        const stat = fs.statSync(fileRecord.path);
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(fileRecord.name)}"`,
+          'Content-Length': stat.size
+        });
+        const readStream = fs.createReadStream(fileRecord.path);
+        readStream.pipe(res);
+      } catch (e) {
+        console.error('[LAN] File stream error:', e);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      }
+      return;
+    }
+
+    res.writeHead(404);
+    res.end('Not Found');
+  });
+
+  function listen(port) {
+    server.listen(port, '0.0.0.0', () => {
+      lanHttpPort = port;
+      lanHttpServer = server;
+      console.log(`[LAN] HTTP server running on http://0.0.0.0:${lanHttpPort}`);
+      
+      startUdpDiscovery();
+      broadcastPresence('ping');
+      startPeerCleanupTimer();
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`[LAN] Port ${port} in use, trying ${port + 1}`);
+        listen(port + 1);
+      } else {
+        console.error('[LAN] HTTP Server error:', err);
+      }
+    });
+  }
+
+  listen(55055);
+}
+
+// Send chat message to all peers
+async function broadcastChatMessage(msgData) {
+  const peers = Array.from(lanPeers.values());
+  const localIp = getLocalIPAddress();
+  
+  const fullMsgData = {
+    id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+    sender: lanUsername,
+    senderIp: localIp,
+    message: msgData.message || '',
+    file: msgData.file || null,
+    timestamp: Date.now()
+  };
+
+  lanChatHistory.push(fullMsgData);
+  saveLanChatHistory();
+
+  if (mainWindow) {
+    uiSend('lan-message-received', fullMsgData);
+  }
+
+  for (const peer of peers) {
+    try {
+      const data = JSON.stringify(fullMsgData);
+      const reqOpts = {
+        hostname: peer.ip,
+        port: peer.httpPort,
+        path: '/api/chat',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data)
+        },
+        timeout: 2000
+      };
+
+      const req = http.request(reqOpts, (res) => {
+        res.on('data', () => {});
+      });
+      
+      req.on('error', (err) => {
+        console.error(`[LAN] Failed to send message to ${peer.username} (${peer.ip}):`, err.message);
+      });
+
+      req.write(data);
+      req.end();
+    } catch (err) {
+      console.error('[LAN] HTTP Request error:', err);
+    }
+  }
+}
+
+// IPC Handlers
+ipcMain.handle('lan-get-status', () => {
+  return {
+    username: lanUsername,
+    ip: getLocalIPAddress(),
+    port: lanHttpPort
+  };
+});
+
+ipcMain.handle('lan-set-username', (event, name) => {
+  if (name && name.trim()) {
+    lanUsername = name.trim();
+    stealthConfig.lanUsername = lanUsername;
+    saveStealthConfig();
+    broadcastPresence('ping');
+    return { success: true, username: lanUsername };
+  }
+  return { success: false, error: 'Invalid username' };
+});
+
+ipcMain.handle('lan-get-peers', () => {
+  return Array.from(lanPeers.values());
+});
+
+ipcMain.handle('lan-get-history', () => {
+  return lanChatHistory;
+});
+
+ipcMain.handle('lan-send-message', async (event, msg) => {
+  try {
+    await broadcastChatMessage({ message: msg });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('lan-share-file', async () => {
+  if (!mainWindow) return { success: false, error: 'No main window' };
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select File to Share on LAN',
+    properties: ['openFile']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, canceled: true };
+  }
+
+  const filePath = result.filePaths[0];
+  const name = path.basename(filePath);
+  let size = 0;
+  try {
+    size = fs.statSync(filePath).size;
+  } catch (e) {}
+
+  const fileId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  lanSharedFiles.set(fileId, { path: filePath, name, size });
+
+  const localIp = getLocalIPAddress();
+  const fileUrl = `http://${localIp}:${lanHttpPort}/api/download/${fileId}`;
+
+  const filePayload = {
+    message: `Shared file: ${name}`,
+    file: {
+      id: fileId,
+      name,
+      size,
+      url: fileUrl
+    }
+  };
+
+  try {
+    await broadcastChatMessage(filePayload);
+    return { success: true, name };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('lan-add-peer-manual', (event, ip) => {
+  if (!ip || !ip.trim()) return { success: false, error: 'Invalid IP' };
+  
+  const peerIp = ip.trim();
+  sendDirectPong(peerIp);
+  
+  const peerKey = peerIp;
+  lanPeers.set(peerKey, {
+    username: 'Discovered (IP)',
+    httpPort: 55055,
+    ip: peerIp,
+    lastSeen: Date.now()
+  });
+  notifyPeersChanged();
+  
+  return { success: true };
+});
+
+app.on('will-quit', () => {
+  if (lanUdpSocket) {
+    try { lanUdpSocket.close(); } catch(e){}
+  }
+  if (lanHttpServer) {
+    try { lanHttpServer.close(); } catch(e){}
+  }
+});
+
+// Start services
+app.whenReady().then(() => {
+  loadLanChatHistory();
+  startHttpServer();
 });
 
